@@ -303,7 +303,7 @@ End of this phase = the brief's "containerise once happy path works end-to-end o
 
 ### T12 — `POST /api/chat`
 
-- **Status:** `[ ] todo`
+- **Status:** `[x] done`
 - **Goal:** Wire the chat route. The orchestrator already exists (T09); this task is the thin HTTP layer plus tests.
 - **Files touched:**
   - New: `backend/app/api/chat.py` — `POST /api/chat`; request model `ChatRequest(question: str)`; response model mirrors `ChatResponse`; route delegates to `RAGOrchestrator.answer`.

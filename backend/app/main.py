@@ -30,6 +30,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from backend.app.api.chat import router as chat_router
 from backend.app.api.errors import DomainError, domain_error_handler
 from backend.app.api.health import router as health_router
 from backend.app.api.ingest import router as ingest_router
@@ -111,6 +112,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(ingest_router)
+    app.include_router(chat_router)
 
     # Guarded static mount — bare-metal dev without a frontend build must
     # still come up. StaticFiles(directory=...) raises at construction when
