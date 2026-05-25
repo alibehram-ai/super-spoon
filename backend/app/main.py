@@ -32,6 +32,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.app.api.errors import DomainError, domain_error_handler
 from backend.app.api.health import router as health_router
+from backend.app.api.ingest import router as ingest_router
 from backend.app.config import Settings, get_settings
 from backend.app.embedding.sbert import SentenceTransformersEmbedder
 from backend.app.llm.ollama import OllamaClient
@@ -109,6 +110,7 @@ def create_app() -> FastAPI:
     app.add_exception_handler(DomainError, domain_error_handler)
 
     app.include_router(health_router)
+    app.include_router(ingest_router)
 
     # Guarded static mount — bare-metal dev without a frontend build must
     # still come up. StaticFiles(directory=...) raises at construction when

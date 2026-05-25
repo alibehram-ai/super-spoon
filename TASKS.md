@@ -280,7 +280,7 @@ End of this phase = the brief's "containerise once happy path works end-to-end o
 
 ### T11 — `POST /api/ingest`
 
-- **Status:** `[ ] todo`
+- **Status:** `[x] done`
 - **Goal:** Wire the ingest pipeline behind the route. Validator → fetcher → cleaner → chunker → embedder (in thread pool) → vector store reset+upsert → summariser → response.
 - **Files touched:**
   - New: `backend/app/api/ingest.py` — `POST /api/ingest`; request model `IngestRequest(url: str)`; response model `IngestResponse(summary, section_count, chunk_count, truncated, char_count)`; route handler composes the pipeline using `Depends(...)` providers; embedder + vector store calls wrapped in `anyio.to_thread.run_sync`.

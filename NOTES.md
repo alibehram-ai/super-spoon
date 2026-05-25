@@ -39,6 +39,21 @@ Frontend opens an `EventSource` on `/api/ingest/stream`, updates the loading sta
 
 ## Things the AI got wrong that I had to correct
 
-(Will be filled in as the project progresses. Per REQUIREMENTS §13.)
-- **Phase 2 (T03–T06):** [your corrections, or "no significant corrections"]
-- **Phase 3 (T07–T09):** [your corrections]
+Per REQUIREMENTS §13. Filled in as the project progresses.
+
+### Phase 2 (T03–T06)
+
+- **T04 — lede chunking gap.** Shipped the chunker matching DESIGN §3 literally (sections only); you caught that the lede would be unreachable in RAG and made me fix it as a follow-up commit (`0990057`). The fix prepends a synthetic `Section` for `CleanedArticle.lede` with `section_index=0` so the lede flows through the same chunking / embedding pipeline as everything else.
+- **T04 — `sys.modules`-based lazy-import guard.** Brittle against T05 legitimately importing `sentence-transformers`; broke as soon as `sbert.py` landed. Replaced with a structural namespace check.
+
+### Phase 3 (T07–T09)
+
+No significant mid-stream corrections. The Protocol / fake / orchestrator boundaries from DESIGN §3 were tight enough that the implementations followed mechanically.
+
+### Phase 4 (T10a–T10b)
+
+- **T10a — `fastapi` dep scheduled in the wrong task.** TASKS.md scheduled `uv add fastapi` for T10b, but T10a's central exception handler IS FastAPI code and its parametrized §5 test needs a FastAPI app. I added the dep during T10a and noted it in the commit; T10b just reused it. Not a correction you had to make, but a TASKS.md ordering issue worth flagging — would have been cleaner to schedule `uv add fastapi` in T10a explicitly.
+- **T10a — `UrlNamespaceError` message threading.** DESIGN §5 specifies the message as `"That looks like a {namespace} page, not an article."` with a placeholder, but the spec also says `(code, message, status)` are class-level attributes. Resolved by making the class-level message a generic default ("non-article Wikipedia page") and accepting an optional `namespace=` constructor arg that overrides via instance attribute when the validator knows which prefix matched. The §5 test asserts the class default; the validator threads the matched prefix.
+- **T10b — `ASGITransport` doesn't drive the ASGI lifespan protocol.** httpx's `ASGITransport` ignores `lifespan` messages, so wrapping `create_app()` in `AsyncClient(transport=ASGITransport(app=app))` does NOT trigger the lifespan body. The lifespan tests instead invoke `lifespan(app)` directly as an `async with` context manager, then use ASGITransport for the HTTP probe inside that context. Worth remembering for T11/T12 ingest/chat tests — if they need a populated `app.state`, the same pattern applies.
+- **T11 — lifespan side-stepped via dependency overrides.** Acting on the T10b lifespan-vs-ASGITransport note: the ingest tests override every `Depends(...)` provider in `app.dependency_overrides`, so `app.state` is never read and the lifespan doesn't need to run. Cleaner than nesting `async with lifespan(app):` around every HTTP probe, and it matches the T11 spec gotcha ("Use FastAPI dependency overrides for the fakes in tests, NOT real construction"). Recording so T12's chat tests follow the same pattern.
+- **T11 — F9 error mapping written as a class of methods, not `@pytest.mark.parametrize`.** TASKS.md T11 says "parametrized". I chose 13 named methods inside a `TestF9ErrorMapping` class instead because each row needs a different fake (different exception class, sometimes a different `_RaisingVectorStore` subclass) and the parametrize id-rendering for exception-class params is noisy. Same end shape — one assertion per F9 row — but failure messages name the row (`test_llm_timeout_returns_504`) rather than a parametrize tuple. Flagging as a deliberate divergence from the plan, not a missed instruction.
