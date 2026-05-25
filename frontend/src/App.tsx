@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { ApiClientError, health, ingest } from "./api/client";
+import { ApiClientError, chat, health, ingest } from "./api/client";
+import { ChatPanel } from "./components/ChatPanel";
+import { ChatTranscript, type ChatEntry } from "./components/ChatTranscript";
 import { ErrorBanner } from "./components/ErrorBanner";
 import { LoadingState } from "./components/LoadingState";
 import { SummaryPanel } from "./components/SummaryPanel";
@@ -15,6 +17,10 @@ export default function App(): JSX.Element {
   const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [transcript, setTranscript] = useState<ChatEntry[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
 
   // null = probe hasn't returned yet (don't render the cold-start sub-label
   // optimistically); true/false = backend answered. Polled ONCE at boot.
@@ -41,6 +47,10 @@ export default function App(): JSX.Element {
     setLoading(true);
     setError(null);
     setSummary(null);
+    // A new article wipes any prior conversation — the old transcript would
+    // be about a different corpus, sources and all.
+    setTranscript([]);
+    setChatError(null);
     try {
       const result = await ingest(url);
       setSummary(result.summary);
@@ -61,6 +71,32 @@ export default function App(): JSX.Element {
     }
   };
 
+  const handleChat = async (question: string): Promise<void> => {
+    setChatLoading(true);
+    setChatError(null);
+    try {
+      const result = await chat(question);
+      setTranscript((prev) => [
+        ...prev,
+        {
+          question,
+          answer: result.answer,
+          sources: result.sources,
+        },
+      ]);
+    } catch (e) {
+      if (e instanceof ApiClientError) {
+        setChatError(e.userMessage);
+      } else {
+        setChatError("Something went wrong. Try again.");
+      }
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const articleReady = summary !== null && !loading;
+
   return (
     <div className="app">
       <header className="app__header">
@@ -75,14 +111,26 @@ export default function App(): JSX.Element {
       {error && <ErrorBanner message={error} />}
       {loading && <LoadingState warmupOk={warmupOk} />}
 
-      {summary !== null && !loading && (
-        <SummaryPanel
-          summary={summary}
-          sectionCount={sectionCount}
-          chunkCount={chunkCount}
-          charCount={charCount}
-          truncated={truncated}
-        />
+      {articleReady && (
+        <>
+          <SummaryPanel
+            summary={summary}
+            sectionCount={sectionCount}
+            chunkCount={chunkCount}
+            charCount={charCount}
+            truncated={truncated}
+          />
+
+          <ChatTranscript entries={transcript} />
+
+          {chatError && <ErrorBanner message={chatError} />}
+
+          <ChatPanel
+            disabled={loading}
+            loading={chatLoading}
+            onSubmit={handleChat}
+          />
+        </>
       )}
     </div>
   );

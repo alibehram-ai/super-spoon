@@ -356,7 +356,7 @@ No automated frontend tests per the Phase-3 answer; verification is manual smoke
 
 ### T14 — Chat panel + transcript + source list
 
-- **Status:** `[ ] todo`
+- **Status:** `[x] done`
 - **Goal:** Wire `ChatPanel`, `ChatTranscript`, and `SourceList`. After this task, the frontend is end-to-end complete.
 - **Files touched (all new under `frontend/src/components/`):**
   - `ChatPanel.tsx` — question textbox + submit; calls `/api/chat`; appends to transcript.
