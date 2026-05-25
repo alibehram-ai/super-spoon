@@ -45,12 +45,16 @@ omit = [
 ]
 
 [tool.coverage.report]
+fail_under = 85
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
     "raise NotImplementedError",
     "\\.\\.\\.",
 ]
+
+[tool.coverage.html]
+directory = "coverage_report"
 
 [tool.ruff]
 line-length = 100

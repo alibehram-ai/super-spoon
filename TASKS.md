@@ -435,7 +435,7 @@ No automated frontend tests per the Phase-3 answer; verification is manual smoke
 
 ### T17 — Coverage report + ≥85% threshold gate
 
-- **Status:** `[ ] todo`
+- **Status:** `[x] done`
 - **Goal:** Generate the HTML coverage report from the **unit-test suite only** (integration tests are excluded from the coverage run because they depend on the compose stack being up — a separate workflow). Verify the ≥85% threshold and commit `coverage_report/`.
 - **Files touched:**
   - Modified: `pyproject.toml` (`[tool.coverage.report] fail_under = 85`; confirm `[tool.pytest.ini_options] markers` from T16 still excludes `integration` from default runs).

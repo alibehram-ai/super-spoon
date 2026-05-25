@@ -13,6 +13,9 @@ __pycache__/
 .coverage.*
 htmlcov/
 coverage.xml
+# coverage_report/ is committed per REQUIREMENTS A15 (HTML report folder).
+# Carve it in defensively in case a future *.html / coverage* rule is added.
+!coverage_report/
 
 # uv keeps the lockfile committed but caches go ignored
 .uv/
