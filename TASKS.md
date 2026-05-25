@@ -44,7 +44,7 @@ Each task adds one component, its domain models if not yet present, its exceptio
 
 ### T02 — `WikipediaFetcher` + REST API mocks
 
-- **Status:** `[ ] todo`
+- **Status:** `[x] done`
 - **Goal:** Ship the fetcher that calls `/page/summary/{title}` then `/page/mobile-sections/{title}`, with single-retry/backoff on transient errors, disambiguation detection via summary metadata (U15), redirect target reflection, and the polite UA header (A13/U6).
 - **Files touched:**
   - New: `backend/app/wikipedia/fetcher.py` (`WikipediaFetcher`, `WikipediaFetchError(reason)`).

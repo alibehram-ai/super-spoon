@@ -1,0 +1,39 @@
+{
+  "type": "standard",
+  "title": "Sample Article",
+  "displaytitle": "Sample Article",
+  "namespace": {
+    "id": 0,
+    "text": ""
+  },
+  "wikibase_item": "Q0",
+  "titles": {
+    "canonical": "Sample_Article",
+    "normalized": "Sample Article",
+    "display": "Sample Article"
+  },
+  "pageid": 12345,
+  "lang": "en",
+  "dir": "ltr",
+  "revision": "1",
+  "tid": "00000000-0000-0000-0000-000000000000",
+  "timestamp": "2024-01-01T00:00:00Z",
+  "description": "A small article used for unit-test fixtures",
+  "description_source": "local",
+  "content_urls": {
+    "desktop": {
+      "page": "https://en.wikipedia.org/wiki/Sample_Article",
+      "revisions": "https://en.wikipedia.org/wiki/Sample_Article?action=history",
+      "edit": "https://en.wikipedia.org/wiki/Sample_Article?action=edit",
+      "talk": "https://en.wikipedia.org/wiki/Talk:Sample_Article"
+    },
+    "mobile": {
+      "page": "https://en.m.wikipedia.org/wiki/Sample_Article",
+      "revisions": "https://en.m.wikipedia.org/wiki/Special:History/Sample_Article",
+      "edit": "https://en.m.wikipedia.org/wiki/Sample_Article?action=edit",
+      "talk": "https://en.m.wikipedia.org/wiki/Talk:Sample_Article"
+    }
+  },
+  "extract": "Sample Article is a tiny stub used to exercise the fetcher.",
+  "extract_html": "<p>Sample Article is a tiny stub used to exercise the fetcher.</p>"
+}
