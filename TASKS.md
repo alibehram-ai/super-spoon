@@ -254,7 +254,7 @@ End of this phase = the brief's "containerise once happy path works end-to-end o
 
 ### T10b — Config + `main.py` + lifespan + warmup + `/health` + `deps.py`
 
-- **Status:** `[ ] todo`
+- **Status:** `[x] done`
 - **Goal:** The FastAPI app exists and can serve `/health`. Lifespan loads the embedder, constructs the vector store / LLM clients, **awaits** the warmup with `WARMUP_TIMEOUT_S` bound, registers the T10a exception handler, and mounts static files defensively for bare-metal dev.
 - **Files touched:**
   - New: `backend/app/config.py` — `Settings(BaseSettings)` with every env var from DESIGN §6.4.
