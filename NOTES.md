@@ -38,6 +38,24 @@ Frontend opens an `EventSource` on `/api/ingest/stream`, updates the loading sta
 
 ---
 
+## Incidents (external)
+
+Things that broke the build for reasons outside the project — upstream APIs being retired, host environment shifts, etc. Separate from "Things the AI got wrong" because the response is what matters, not the assignment of blame.
+
+### `/page/mobile-sections/` retired by Wikimedia mid-Phase-5
+
+**When discovered:** 2026-05-25, during T13's bare-metal smoke. After successfully booting the stack and ingesting Photosynthesis from the UI for the first time, the request returned `400 article_not_found`. `curl` against the live REST API confirmed `/page/mobile-sections/Photosynthesis` returned 404. Probing siblings: `/page/mobile-sections-lead/`, `/page/mobile-sections-remaining/` also 404. The whole legacy mobile-sections family is gone. `/page/summary/`, `/page/html/`, and `/page/mobile-html/` still serve 200.
+
+**Why it's an incident, not a mistake.** REQUIREMENTS §10 OQ-4 locked Wikipedia REST API as the scraping strategy with user sign-off. DESIGN §4.10 picked `/page/mobile-sections/` and called out the deprecation in writing ("on Wikimedia's long-term deprecation track; the Parsoid migration is logged in NOTES.md"). The plan was "migrate eventually". In practice Wikimedia retired the endpoint within the lifetime of this take-home — faster than their own deprecation notice suggested. T02 had been working against synthetic JSON fixtures the whole way and never exercised the live endpoint until T13's manual smoke, so the breakage was invisible to the test suite.
+
+**Impact.** T13's manual smoke was blocked because no real article could ingest. T02's fetcher and its unit-test fixtures both targeted the retired endpoint, so the fix touched both. T16's planned Photosynthesis fixture and regenerate script would have hit the same wall — those land *after* this migration now and pick up the new endpoint shape for free.
+
+**Resolution.** Pulled the Parsoid migration from "future work" forward into a mid-Phase-5 fire drill (commit `0481b71 fix(t02): migrate fetcher to /page/html ...`). The crossed-out entry at the top of this file documents the code-level changes. 30–45 min of work end to end including the test churn; the migration plan in NOTES.md predicted the shape of the fix correctly, which is why the drill was contained.
+
+**Lesson.** "Long-term deprecation track" endpoints want a smoke test against the live API before being relied on in a take-home, not just synthetic fixtures. The full unit suite (238 tests, all green) couldn't catch this because every test in the fetcher suite uses `httpx.MockTransport` returning canned bytes. T16's real-Wikipedia fixture regeneration step would have caught it, but T16 is two phases away — too late for T13's smoke. In a v2 I'd add a single network-touching smoke at the bottom of T02 (`@pytest.mark.integration` so it stays out of the default run) that hits `/page/summary/Wikipedia` and asserts 200 — cheap insurance against this exact class of regression.
+
+---
+
 ## Things the AI got wrong that I had to correct
 
 Per REQUIREMENTS §13. Filled in as the project progresses.
@@ -66,5 +84,5 @@ No significant mid-stream corrections. The Protocol / fake / orchestrator bounda
 
 ### Phase 5 (T13–T14)
 
-- **T13 bare-metal smoke — Wikimedia retired `/page/mobile-sections/`.** Not an AI mistake — an external surprise. First post-T13 ingest of `Photosynthesis` returned 404 from the legacy endpoint we'd been calling all along. Resolution: pulled the Parsoid migration that NOTES already had as "future work" forward into a mid-Phase-5 fire drill, retired the JSON fixture in favour of an HTML one, swapped the parser. Full unit suite (238 tests) still green after the swap. Captured here so the trail is visible: the legacy REST API timeline turned out to be shorter than Wikimedia's own deprecation notice suggested. Lesson for future projects: even "long-term deprecation track" endpoints want a smoke test against the live API before relying on them in a take-home, not just synthetic fixtures.
+- **T13 bare-metal smoke — `/page/mobile-sections/` retired.** Moved to the "Incidents (external)" section above — it wasn't an AI mistake, it was Wikimedia retiring the endpoint sooner than their deprecation notice suggested. Kept this stub so the Phase 5 trail stays scannable.
 - **T13 pre-flight — `.env` defaulted to docker hostnames.** Bare-metal smoke needs `localhost`-pointed URLs but the `.env.example` (and the user-copied `.env`) carried the containerised-mode `http://ollama:11434` / `http://qdrant:6333` from DESIGN §6.4. Symptom: `/api/health` returned `warmup_ok=false` because the warmup couldn't resolve `ollama`. Fixed `.env` to localhost; surfaced a separate test bug (`test_defaults_match_design_6_4_table` was reading user-local `.env` into the assertion — patched to `Settings(_env_file=None)` so the test asserts class defaults regardless of local config).
