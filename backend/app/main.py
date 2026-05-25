@@ -105,7 +105,7 @@ def _build_llm_client(settings: Settings) -> OllamaClient:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="silver-spoon2", lifespan=lifespan)
+    app = FastAPI(title="Footnote", lifespan=lifespan)
 
     # Central DESIGN §5 mapping — one registration, every route benefits.
     app.add_exception_handler(DomainError, domain_error_handler)

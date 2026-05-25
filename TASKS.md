@@ -458,7 +458,7 @@ No automated frontend tests per the Phase-3 answer; verification is manual smoke
 
 ### T18 — README + "Maintaining fixtures" + swap docs + cold-start docs
 
-- **Status:** `[ ] todo`
+- **Status:** `[x] done`
 - **Goal:** Write `README.md` per NF9. Specific sections required:
   - **Prerequisites** — Docker (containerised-Ollama mode) *or* Docker + host `ollama serve` (host-fallback mode).
   - **Quickstart — two invocations side-by-side:**

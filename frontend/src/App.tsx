@@ -100,9 +100,10 @@ export default function App(): JSX.Element {
   return (
     <div className="app">
       <header className="app__header">
-        <h1 className="app__title">silver-spoon2</h1>
+        <h1 className="app__title">Footnote</h1>
         <p className="app__subtitle">
-          Paste a Wikipedia article URL to ingest and summarise it locally.
+          Wikipedia, with sources. Paste a URL, get a local summary, then
+          chat with the article.
         </p>
       </header>
 
