@@ -6,17 +6,18 @@ Scratch pad for things that didn't make it into REQUIREMENTS/DESIGN but matter f
 
 ## Future work
 
-### Migrate off `/page/mobile-sections/` to Parsoid-backed endpoints
+### ~~Migrate off `/page/mobile-sections/` to Parsoid-backed endpoints~~ — DONE mid-Phase-5
 
-`WikipediaFetcher` uses `https://en.wikipedia.org/api/rest_v1/page/mobile-sections/{title}` for section-structured article content. That endpoint is part of Wikimedia's legacy REST API and is on the long-term deprecation track. The eventual replacement is the MediaWiki Core REST API's HTML endpoint (`/page/html/{title}`, Parsoid-served), which returns the full article as a structured HTML/Parsoid DOM rather than pre-sectioned JSON.
+`WikipediaFetcher` originally used `https://en.wikipedia.org/api/rest_v1/page/mobile-sections/{title}` for section-structured article content. That endpoint was part of Wikimedia's legacy REST API and we expected to migrate "eventually". In practice Wikimedia retired the whole `mobile-sections*` family (lead, remaining, and combined) sooner than the deprecation notice suggested — discovered during T13's bare-metal smoke when ingesting `Photosynthesis` returned `article_not_found`. Probed alternatives: `/page/html/{title}` and `/page/mobile-html/{title}` both still serve Parsoid HTML; only the legacy mobile-sections family is gone.
 
-Migration shape (when Wikimedia announces a firm equivalent):
-- Swap the second-call endpoint in `WikipediaFetcher.fetch`.
-- Add a Parsoid HTML → section-list parser (split on `<section>` tags or `<h2>` headings depending on Parsoid version).
-- Keep `/page/summary/{title}` for disambiguation/redirect detection (U15) — that one isn't deprecated.
-- Integration fixture regenerates against the new endpoint shape; assertions verify section titles unchanged.
+Migration applied:
+- Swapped the second-call endpoint from `/page/mobile-sections/{title}` to `/page/html/{title}`.
+- Replaced the per-section JSON-text → `<p>` extractor with a single-pass Parsoid HTML parser (`_ParsoidHtmlParser`, stdlib `html.parser`). Sections split on any heading tag (`<h2>`..`<h6>`), matching the flattened section list the legacy API returned. `<p>` content within each section is collected; everything else (figures, tables, lists, edit-section spans) is dropped — same posture as the legacy parser.
+- Kept `/page/summary/{title}` unchanged for disambiguation / redirect / 404 gating (U15 / OQ-8).
+- Replaced `tests/fixtures/sample_mobile_sections.json` with `tests/fixtures/sample_parsoid.html` carrying the same logical structure (lede with `[1]` citation, "Overview" / "Details" / "References" sections); behavioural assertions in `test_wikipedia_fetcher.py` are unchanged.
+- No new dependency added — stdlib `html.parser` handles Parsoid HTML well enough for our extraction (`<p>` text within heading-delimited sections).
 
-This isn't urgent — the legacy REST API will be supported for years — but a production-bound version would do it.
+T16's Photosynthesis fixture and regenerate script will land *after* this migration, so they pick up the new endpoint and parse shape for free — no follow-up needed there.
 
 ### Real per-phase ingest progress via Server-Sent Events
 
@@ -62,3 +63,8 @@ No significant mid-stream corrections. The Protocol / fake / orchestrator bounda
   Tightened to require exact "not found in the article" phrasing and
   moved the instruction to the end of the prompt for recency. Verified
   by hand against curl before proceeding to T13.
+
+### Phase 5 (T13–T14)
+
+- **T13 bare-metal smoke — Wikimedia retired `/page/mobile-sections/`.** Not an AI mistake — an external surprise. First post-T13 ingest of `Photosynthesis` returned 404 from the legacy endpoint we'd been calling all along. Resolution: pulled the Parsoid migration that NOTES already had as "future work" forward into a mid-Phase-5 fire drill, retired the JSON fixture in favour of an HTML one, swapped the parser. Full unit suite (238 tests) still green after the swap. Captured here so the trail is visible: the legacy REST API timeline turned out to be shorter than Wikimedia's own deprecation notice suggested. Lesson for future projects: even "long-term deprecation track" endpoints want a smoke test against the live API before relying on them in a take-home, not just synthetic fixtures.
+- **T13 pre-flight — `.env` defaulted to docker hostnames.** Bare-metal smoke needs `localhost`-pointed URLs but the `.env.example` (and the user-copied `.env`) carried the containerised-mode `http://ollama:11434` / `http://qdrant:6333` from DESIGN §6.4. Symptom: `/api/health` returned `warmup_ok=false` because the warmup couldn't resolve `ollama`. Fixed `.env` to localhost; surfaced a separate test bug (`test_defaults_match_design_6_4_table` was reading user-local `.env` into the assertion — patched to `Settings(_env_file=None)` so the test asserts class defaults regardless of local config).

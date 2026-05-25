@@ -197,7 +197,10 @@ class TestSettingsDefaults:
     """
 
     def test_defaults_match_design_6_4_table(self) -> None:
-        s = Settings()
+        # Bypass any local `.env` so the test asserts class defaults — a
+        # developer with a bare-metal `.env` (localhost URLs) would otherwise
+        # see this test fail through no fault of the code under test.
+        s = Settings(_env_file=None)  # type: ignore[call-arg]
         # LLM / warmup
         assert s.llm_model == "llama3.2:3b"
         assert s.ollama_base_url == "http://ollama:11434"

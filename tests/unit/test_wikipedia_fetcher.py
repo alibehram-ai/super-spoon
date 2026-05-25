@@ -19,9 +19,13 @@ USER_AGENT = "silver-spoon-test/0.0 (https://example.invalid; contact: test@exam
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures"
 
 
-def _load(name: str) -> dict[str, Any]:
+def _load_json(name: str) -> dict[str, Any]:
     with (FIXTURE_DIR / name).open() as f:
         return json.load(f)
+
+
+def _load_text(name: str) -> str:
+    return (FIXTURE_DIR / name).read_text()
 
 
 def _build_fetcher(
@@ -57,7 +61,7 @@ class TestErrorPaths:
 
         with pytest.raises(ArticleNotFoundError):
             await fetcher.fetch("Missing")
-        # mobile-sections must not be called when summary 404s.
+        # The body endpoint must not be called when summary 404s.
         assert all("/page/summary/" in str(r.url) for r in recorded)
 
     async def test_disambiguation_short_circuits(self) -> None:
@@ -76,7 +80,7 @@ class TestErrorPaths:
                         },
                     },
                 )
-            pytest.fail(f"mobile-sections must not be called on disambiguation; got {url}")
+            pytest.fail(f"body endpoint must not be called on disambiguation; got {url}")
 
         fetcher, recorded = _build_fetcher(handler)
 
@@ -93,15 +97,15 @@ class TestErrorPaths:
 
         with pytest.raises(WikipediaUnavailableError):
             await fetcher.fetch("Anything")
-        # initial attempt + one retry = 2 summary calls; mobile-sections never reached.
+        # initial attempt + one retry = 2 summary calls; body endpoint never reached.
         assert len(recorded) == 2
         assert all("/page/summary/" in str(r.url) for r in recorded)
 
-    async def test_404_from_mobile_sections_also_raises_not_found(self) -> None:
+    async def test_404_from_html_also_raises_not_found(self) -> None:
         # Defensive branch: summary succeeded but the body endpoint 404s. Not
         # enumerated in DESIGN §5, but treating it as not_found is the only
         # behaviour that doesn't leak a partially-formed article downstream.
-        summary_body = _load("sample_summary.json")
+        summary_body = _load_json("sample_summary.json")
 
         def handler(request: httpx.Request) -> httpx.Response:
             if "/page/summary/" in str(request.url):
@@ -130,8 +134,8 @@ class TestErrorPaths:
 class TestRetryRecovery:
     async def test_503_then_200_recovers(self) -> None:
         summary_calls = {"n": 0}
-        summary_body = _load("sample_summary.json")
-        mobile_body = _load("sample_mobile_sections.json")
+        summary_body = _load_json("sample_summary.json")
+        html_body = _load_text("sample_parsoid.html")
 
         def handler(request: httpx.Request) -> httpx.Response:
             url = str(request.url)
@@ -140,29 +144,29 @@ class TestRetryRecovery:
                 if summary_calls["n"] == 1:
                     return httpx.Response(503, json={"detail": "transient"})
                 return httpx.Response(200, json=summary_body)
-            if "/page/mobile-sections/" in url:
-                return httpx.Response(200, json=mobile_body)
+            if "/page/html/" in url:
+                return httpx.Response(200, text=html_body)
             raise AssertionError(f"unexpected URL {url}")
 
         fetcher, recorded = _build_fetcher(handler)
         result = await fetcher.fetch("Sample_Article")
 
         assert isinstance(result, WikipediaArticle)
-        # 2 summary calls (one 503 + one 200) + 1 mobile-sections call.
+        # 2 summary calls (one 503 + one 200) + 1 body call.
         assert summary_calls["n"] == 2
         assert len(recorded) == 3
-        assert sum("/page/mobile-sections/" in str(r.url) for r in recorded) == 1
+        assert sum("/page/html/" in str(r.url) for r in recorded) == 1
 
 
 class TestHeaders:
     async def test_user_agent_on_every_recorded_request(self) -> None:
-        summary_body = _load("sample_summary.json")
-        mobile_body = _load("sample_mobile_sections.json")
+        summary_body = _load_json("sample_summary.json")
+        html_body = _load_text("sample_parsoid.html")
 
         def handler(request: httpx.Request) -> httpx.Response:
             if "/page/summary/" in str(request.url):
                 return httpx.Response(200, json=summary_body)
-            return httpx.Response(200, json=mobile_body)
+            return httpx.Response(200, text=html_body)
 
         fetcher, recorded = _build_fetcher(handler)
         await fetcher.fetch("Sample_Article")
@@ -173,18 +177,18 @@ class TestHeaders:
 
 
 class TestRedirectCanonicalReflection:
-    async def test_canonical_title_from_summary_used_for_mobile_sections(self) -> None:
-        summary_body = _load("sample_summary.json")
+    async def test_canonical_title_from_summary_used_for_html(self) -> None:
+        summary_body = _load_json("sample_summary.json")
         # Force a redirect: requested "Sample Article" → canonical "Sample_Article".
         # (sample_summary fixture already encodes that distinction.)
-        mobile_body = _load("sample_mobile_sections.json")
+        html_body = _load_text("sample_parsoid.html")
 
         def handler(request: httpx.Request) -> httpx.Response:
             url = str(request.url)
             if "/page/summary/" in url:
                 return httpx.Response(200, json=summary_body)
-            if "/page/mobile-sections/" in url:
-                return httpx.Response(200, json=mobile_body)
+            if "/page/html/" in url:
+                return httpx.Response(200, text=html_body)
             raise AssertionError(f"unexpected URL {url}")
 
         fetcher, recorded = _build_fetcher(handler)
@@ -194,25 +198,25 @@ class TestRedirectCanonicalReflection:
         assert result.canonical_title == "Sample_Article"
 
         summary_calls = [r for r in recorded if "/page/summary/" in str(r.url)]
-        mobile_calls = [r for r in recorded if "/page/mobile-sections/" in str(r.url)]
+        html_calls = [r for r in recorded if "/page/html/" in str(r.url)]
         assert len(summary_calls) == 1
-        assert len(mobile_calls) == 1
+        assert len(html_calls) == 1
 
         # Summary was called with the requested (URL-encoded) title.
         assert "/page/summary/Sample%20Article" in str(summary_calls[0].url)
-        # Mobile-sections was called with the *canonical* title from summary.
-        assert "/page/mobile-sections/Sample_Article" in str(mobile_calls[0].url)
+        # Body endpoint was called with the *canonical* title from summary.
+        assert "/page/html/Sample_Article" in str(html_calls[0].url)
 
 
 class TestHappyPathAgainstFixtures:
     async def test_returns_structured_wikipedia_article(self) -> None:
-        summary_body = _load("sample_summary.json")
-        mobile_body = _load("sample_mobile_sections.json")
+        summary_body = _load_json("sample_summary.json")
+        html_body = _load_text("sample_parsoid.html")
 
         def handler(request: httpx.Request) -> httpx.Response:
             if "/page/summary/" in str(request.url):
                 return httpx.Response(200, json=summary_body)
-            return httpx.Response(200, json=mobile_body)
+            return httpx.Response(200, text=html_body)
 
         fetcher, _ = _build_fetcher(handler)
         result = await fetcher.fetch("Sample_Article")
@@ -241,30 +245,26 @@ class TestHappyPathAgainstFixtures:
         assert references.title == "References"
         assert references.paragraphs == []
 
-    async def test_html_paragraph_extraction_strips_outer_whitespace(self) -> None:
-        summary_body = _load("sample_summary.json")
-        mobile_body = {
-            "lead": {"sections": [{"id": 0, "text": "  <p>  hello world  </p>  "}]},
-            "remaining": {"sections": []},
-        }
+    async def test_paragraph_extraction_strips_outer_whitespace(self) -> None:
+        summary_body = _load_json("sample_summary.json")
+        html_body = "  <p>  hello world  </p>  "
 
         def handler(request: httpx.Request) -> httpx.Response:
             if "/page/summary/" in str(request.url):
                 return httpx.Response(200, json=summary_body)
-            return httpx.Response(200, json=mobile_body)
+            return httpx.Response(200, text=html_body)
 
         fetcher, _ = _build_fetcher(handler)
         result = await fetcher.fetch("Sample_Article")
         assert result.lede == "hello world"
 
-    async def test_empty_lead_sections_yields_empty_lede(self) -> None:
-        summary_body = _load("sample_summary.json")
-        mobile_body = {"lead": {"sections": []}, "remaining": {"sections": []}}
+    async def test_empty_html_body_yields_empty_lede_and_sections(self) -> None:
+        summary_body = _load_json("sample_summary.json")
 
         def handler(request: httpx.Request) -> httpx.Response:
             if "/page/summary/" in str(request.url):
                 return httpx.Response(200, json=summary_body)
-            return httpx.Response(200, json=mobile_body)
+            return httpx.Response(200, text="")
 
         fetcher, _ = _build_fetcher(handler)
         result = await fetcher.fetch("Sample_Article")
