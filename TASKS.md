@@ -331,7 +331,7 @@ No automated frontend tests per the Phase-3 answer; verification is manual smoke
 
 ### T13 — Frontend scaffold + URL input + summary panel + loading state
 
-- **Status:** `[ ] todo`
+- **Status:** `[x] done`
 - **Goal:** Stand up Vite/React, wire `UrlInput`, `LoadingState`, `SummaryPanel`, and `ErrorBanner`. After this task, the user can paste a URL and see a summary rendered in the browser, served from `vite dev` against the bare-metal backend (`VITE_API_BASE=http://localhost:8000`).
 - **Files touched (all new under `frontend/`):**
   - `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`, `frontend/vite.config.ts` (configure `/api` proxy to `http://localhost:8000` in dev), `frontend/index.html`.
