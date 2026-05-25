@@ -72,7 +72,9 @@ class TestSectionUnderCeiling:
             section_index=0,
             char_offset_start=100,
         )
-        article = make_article([section], lede="L" * 98)
+        # No lede here — this test isolates the single-section-under-ceiling path.
+        # Lede chunking is exercised in TestLedeChunking.
+        article = make_article([section])
         chunker = Chunker(
             section_ceiling_tokens=1000,
             sub_size_tokens=512,
@@ -423,6 +425,159 @@ class TestEdgeCases:
                 sub_overlap_tokens=512,
                 tokenizer=fake_tokenizer,
             )
+
+
+class TestLedeChunking:
+    """The chunker must produce chunks for the lede so RAG can retrieve from
+    introductory content — DESIGN §3 left this implicit. Lede chunks carry
+    section_index=0 and section_title="Introduction" by default; real sections
+    keep their cleaner-assigned section_index (so a section_index=0 collision
+    with the first real section is possible and acceptable — chunk_index is
+    the unique key).
+    """
+
+    def test_lede_emits_a_chunk_with_introduction_title(self) -> None:
+        lede = "alpha beta gamma delta"  # 4 tokens
+        section = make_section(
+            title="Body",
+            paragraphs=["body content here"],
+            section_index=0,
+            char_offset_start=len(lede) + _PARA_SEP_LEN,
+        )
+        article = make_article([section], lede=lede)
+        chunker = Chunker(
+            section_ceiling_tokens=1000,
+            sub_size_tokens=512,
+            sub_overlap_tokens=64,
+            tokenizer=fake_tokenizer,
+        )
+
+        chunks = chunker.chunk(article)
+
+        assert len(chunks) == 2
+        assert chunks[0].section_title == "Introduction"
+        assert chunks[0].text == lede
+        assert chunks[0].section_index == 0
+        assert chunks[0].chunk_index == 0
+        assert chunks[0].chunk_index_in_section == 0
+        assert chunks[1].section_title == "Body"
+        assert chunks[1].chunk_index == 1
+
+    def test_lede_chunk_char_offsets_round_trip_into_linearised_body(self) -> None:
+        lede = "alpha beta gamma\n\ndelta epsilon zeta"
+        section = make_section(
+            title="Body",
+            paragraphs=["body paragraph here"],
+            section_index=0,
+            char_offset_start=len(lede) + _PARA_SEP_LEN,
+        )
+        article = make_article([section], lede=lede)
+        chunker = Chunker(
+            section_ceiling_tokens=1000,
+            sub_size_tokens=512,
+            sub_overlap_tokens=64,
+            tokenizer=fake_tokenizer,
+        )
+
+        chunks = chunker.chunk(article)
+        body = linearised_body(article)
+
+        for chunk in chunks:
+            assert body[chunk.char_offset_start : chunk.char_offset_end] == chunk.text
+
+    def test_empty_lede_emits_no_lede_chunk(self) -> None:
+        section = make_section(
+            title="Body",
+            paragraphs=["body content here"],
+            section_index=0,
+            char_offset_start=0,
+        )
+        article = make_article([section], lede="")
+        chunker = Chunker(
+            section_ceiling_tokens=1000,
+            sub_size_tokens=512,
+            sub_overlap_tokens=64,
+            tokenizer=fake_tokenizer,
+        )
+
+        chunks = chunker.chunk(article)
+
+        assert len(chunks) == 1
+        assert chunks[0].section_title == "Body"
+
+    def test_long_lede_is_sub_chunked(self) -> None:
+        # 12 lede paragraphs × 100 tokens each = 1200 tokens, joined with \n\n.
+        lede_paragraphs = [
+            f"L{i} " + " ".join(f"u{i}-{j}" for j in range(99)) for i in range(12)
+        ]
+        lede = _PARA_SEP.join(lede_paragraphs)
+        article = CleanedArticle(
+            title="Test Article",
+            lede=lede,
+            sections=[],
+            total_chars=len(lede),
+            truncated=False,
+        )
+        chunker = Chunker(
+            section_ceiling_tokens=1000,
+            sub_size_tokens=512,
+            sub_overlap_tokens=64,
+            tokenizer=fake_tokenizer,
+        )
+
+        chunks = chunker.chunk(article)
+
+        assert len(chunks) >= 3
+        assert {c.section_title for c in chunks} == {"Introduction"}
+        # chunk_index_in_section increments within the lede (which is its own section).
+        assert [c.chunk_index_in_section for c in chunks] == list(range(len(chunks)))
+        # chunk_index is globally monotonic from 0.
+        assert [c.chunk_index for c in chunks] == list(range(len(chunks)))
+
+    def test_lede_title_is_configurable(self) -> None:
+        lede = "alpha beta gamma"
+        article = CleanedArticle(
+            title="Test",
+            lede=lede,
+            sections=[],
+            total_chars=len(lede),
+            truncated=False,
+        )
+        chunker = Chunker(
+            section_ceiling_tokens=1000,
+            sub_size_tokens=512,
+            sub_overlap_tokens=64,
+            tokenizer=fake_tokenizer,
+            lede_section_title="Lead",
+        )
+
+        chunks = chunker.chunk(article)
+
+        assert chunks[0].section_title == "Lead"
+
+    def test_lede_only_article_still_produces_chunks(self) -> None:
+        # Resolves the "never returns []" contract gap: CleanedArticle with a
+        # 500-char lede and no sections (allowed by the cleaner) now produces
+        # at least one chunk for the lede.
+        lede = " ".join(f"w{i}" for i in range(100))
+        article = CleanedArticle(
+            title="Stub",
+            lede=lede,
+            sections=[],
+            total_chars=len(lede),
+            truncated=False,
+        )
+        chunker = Chunker(
+            section_ceiling_tokens=1000,
+            sub_size_tokens=512,
+            sub_overlap_tokens=64,
+            tokenizer=fake_tokenizer,
+        )
+
+        chunks = chunker.chunk(article)
+
+        assert len(chunks) >= 1
+        assert chunks[0].section_title == "Introduction"
 
 
 class TestSentenceTransformersNotLoadedDuringUnitTests:
