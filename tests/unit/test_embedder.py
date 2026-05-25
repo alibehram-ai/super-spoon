@@ -43,7 +43,7 @@ class FakeSentenceTransformer:
             raise self.raise_on_encode
         return [[float((i * 7 + idx) % 1000) / 1000.0 for i in range(384)] for idx, _ in enumerate(texts)]
 
-    def get_sentence_embedding_dimension(self) -> int:
+    def get_embedding_dimension(self) -> int:
         return self.embedding_dimension
 
     @classmethod
@@ -123,7 +123,7 @@ class TestConstruction:
 
 
 class TestVectorSize:
-    def test_proxies_to_get_sentence_embedding_dimension(
+    def test_proxies_to_get_embedding_dimension(
         self, patched_st: type[FakeSentenceTransformer]
     ) -> None:
         embedder = SentenceTransformersEmbedder()

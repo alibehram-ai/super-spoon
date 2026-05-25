@@ -27,7 +27,7 @@ class SentenceTransformersEmbedder:
 
     @property
     def vector_size(self) -> int:
-        return int(self._model.get_sentence_embedding_dimension())
+        return int(self._model.get_embedding_dimension())
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         if not texts:

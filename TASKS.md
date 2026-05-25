@@ -415,7 +415,7 @@ No automated frontend tests per the Phase-3 answer; verification is manual smoke
 
 ### T16 — Integration tests + Photosynthesis fixture + regenerate script
 
-- **Status:** `[ ] todo`
+- **Status:** `[x] done`
 - **Goal:** Ship the two integration tests from DESIGN §7.2 and the committed regenerate script.
 - **Files touched:**
   - New: `scripts/__init__.py` (empty), `scripts/regenerate_fixture.py` — `httpx.get` against `/page/summary/Photosynthesis` and `/page/mobile-sections/Photosynthesis` with the polite UA from `WIKIPEDIA_USER_AGENT`, writes `tests/fixtures/photosynthesis_rest_api.json` (a `{summary: ..., mobile_sections: ...}` envelope).
