@@ -90,7 +90,7 @@ Each task adds one component, its domain models if not yet present, its exceptio
 
 ### T04 — Tokenizer wrapper + section-aware `Chunker`
 
-- **Status:** `[ ] todo`
+- **Status:** `[x] done`
 - **Goal:** Implement the A10 chunking strategy: whole-section under the ceiling, paragraph-aware sub-chunking with overlap above it. Chunker takes a tokenizer callable (DESIGN §3) so the unit tests can use a deterministic fake.
 - **Files touched:**
   - New: `backend/app/chunking/__init__.py`, `backend/app/chunking/chunker.py` (`Chunker`), `backend/app/chunking/tokenizer.py` (thin wrapper that lazily loads the SBERT tokenizer; *not* called by unit tests).

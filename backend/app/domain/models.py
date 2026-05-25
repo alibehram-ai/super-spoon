@@ -37,3 +37,14 @@ class CleanedArticle:
     sections: list[Section]
     total_chars: int
     truncated: bool
+
+
+@dataclass(frozen=True)
+class Chunk:
+    chunk_index: int
+    section_index: int
+    chunk_index_in_section: int
+    section_title: str
+    text: str
+    char_offset_start: int
+    char_offset_end: int
