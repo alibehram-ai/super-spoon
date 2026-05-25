@@ -16,7 +16,7 @@ Status legend: `[ ] todo` · `[~] in-progress` · `[x] done`. All tasks start `[
 
 ### T01 — URL validator + minimum repo scaffold
 
-- **Status:** `[ ] todo`
+- **Status:** `[x] done`
 - **Goal:** Stand up the smallest possible repo (pyproject + tooling + test runner + coverage skeleton) and ship the first pure-function module: `validate_url`. Per the brief's "first task is working code, not scaffold" rule, the scaffold is folded into this task because the validator needs *somewhere* to live.
 - **Files touched (new):**
   - `pyproject.toml` — `uv` project metadata, dev deps (`pytest`, `pytest-cov`, `coverage`, `ruff`), `[tool.coverage.run]` and `[tool.coverage.report]` blocks pre-populated with the DESIGN §7.4 exclusions (even though most excluded files don't exist yet — they will, and shipping the config now means no later task is "and also update coverage exclusions"). `[tool.ruff]` minimal config.

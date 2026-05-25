@@ -1,2 +1,22 @@
 \# Engineering Task.md
 .claude/settings.local.json
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# uv keeps the lockfile committed but caches go ignored
+.uv/
+
+# Secrets — only .env.example is committed
+.env
+.env.local
