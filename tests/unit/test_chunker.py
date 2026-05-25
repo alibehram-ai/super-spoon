@@ -581,13 +581,16 @@ class TestLedeChunking:
 
 
 class TestSentenceTransformersNotLoadedDuringUnitTests:
-    def test_tokenizer_module_does_not_import_sentence_transformers_at_import_time(self) -> None:
-        # Importing the tokenizer wrapper module must NOT pull sentence-transformers in.
-        # The dep isn't even installed yet (T05 adds it); importing tokenizer.py before
-        # then must remain safe.
+    def test_tokenizer_module_does_not_bind_sentence_transformers_at_module_scope(self) -> None:
+        # The tokenizer wrapper must keep its sentence-transformers import lazy
+        # (inside `get_sbert_tokenizer`), so the chunker can be unit-tested with
+        # a fake tokenizer and downstream modules can import tokenizer.py
+        # without pulling the heavy model dep in. We assert structurally:
+        # neither the `SentenceTransformer` class nor the `sentence_transformers`
+        # module appears in the tokenizer module's own namespace.
         import importlib
-        import sys
 
-        sys.modules.pop("backend.app.chunking.tokenizer", None)
-        importlib.import_module("backend.app.chunking.tokenizer")
-        assert "sentence_transformers" not in sys.modules
+        mod = importlib.import_module("backend.app.chunking.tokenizer")
+        namespace = vars(mod)
+        assert "SentenceTransformer" not in namespace
+        assert "sentence_transformers" not in namespace

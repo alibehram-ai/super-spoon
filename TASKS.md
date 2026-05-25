@@ -112,7 +112,7 @@ Each task adds one component, its domain models if not yet present, its exceptio
 
 ### T05 — `Embedder` Protocol + SBERT impl (patched in unit tests)
 
-- **Status:** `[ ] todo`
+- **Status:** `[x] done`
 - **Goal:** Define the `Embedder` Protocol (NF4) and ship `SentenceTransformersEmbedder` that wraps `sentence-transformers`. Unit tests patch `SentenceTransformer` to a stub so the suite stays fast and hermetic; the real-model smoke test is its own integration test (T16).
 - **Files touched:**
   - New: `backend/app/embedding/__init__.py`, `backend/app/embedding/base.py` (`Embedder` Protocol, `EmbeddingError`), `backend/app/embedding/sbert.py` (`SentenceTransformersEmbedder`).
