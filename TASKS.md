@@ -182,7 +182,7 @@ Each task adds one component, its domain models if not yet present, its exceptio
 
 ### T08 — `Summariser` + `FakeLLM`
 
-- **Status:** `[ ] todo`
+- **Status:** `[x] done`
 - **Goal:** Implement the A4 / §4.7 routing: short-article path passes full cleaned body; long-article path builds the structured outline (lede + per-section heading + first sentence capped at `per_section_tokens`). Single LLM call always. Introduces `tests/fakes.py` with `FakeLLM` (used here and reused by T09/T11/T12).
 - **Files touched:**
   - New: `backend/app/rag/__init__.py`, `backend/app/rag/summariser.py` (`Summariser`).
