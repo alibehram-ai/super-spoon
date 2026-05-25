@@ -69,7 +69,7 @@ Each task adds one component, its domain models if not yet present, its exceptio
 
 ### T03 — `ArticleCleaner` + min/max enforcement
 
-- **Status:** `[ ] todo`
+- **Status:** `[x] done`
 - **Goal:** Drop the F3/U12 sections, strip inline citation markers, enforce the < 500-char floor (raise) and the 200K-char cap (truncate + flag).
 - **Files touched:**
   - New: `backend/app/wikipedia/cleaner.py` (`ArticleCleaner`, `ArticleTooShortError`).
