@@ -40,3 +40,5 @@ Frontend opens an `EventSource` on `/api/ingest/stream`, updates the loading sta
 ## Things the AI got wrong that I had to correct
 
 (Will be filled in as the project progresses. Per REQUIREMENTS §13.)
+- **Phase 2 (T03–T06):** [your corrections, or "no significant corrections"]
+- **Phase 3 (T07–T09):** [your corrections]
