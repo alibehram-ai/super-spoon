@@ -915,17 +915,7 @@ Backend is a flat Python package. Each component is its own module; the package 
 
 ## 9. Remaining design decisions to challenge before TASKS.md
 
-The three challenges raised in the initial DESIGN draft (summary threshold, warmup mechanism, embedder sync/async) are all resolved this revision — see §11 changelog. After the revision, no top-tier residual challenges remain. Two lower-tier calls are worth a quick second look before TASKS.md, but neither is load-bearing enough that I'd hold up Phase 3 over them:
-
-### 9.1 §4.2 — `WARMUP_TIMEOUT_S = 30`
-
-The warmup now awaits with a 30-second timeout. On a slow developer laptop the first `generate` against a freshly-loaded `llama3.2:3b` (even with the pull complete) can take 15–25 s as Ollama loads the model into resident memory, plus a few seconds for the trivial generation. 30 s is a comfortable margin in normal conditions but tight enough that an unusually slow host (or a constrained CI runner) will trip it and start the app with `warmup_ok=False`. Bumping to 60 s would virtually eliminate that tail risk at the cost of slower startup on every cold compose-up.
-
-I lean toward 30 s — failure here degrades gracefully (warning + `warmup_ok=False`, not a crash) and a longer timeout means a worse experience for the 99% case of working hosts. Worth a flag, not worth a fight.
-
-### 9.2 §4.5 — `Chunk.chunk_index` is global, not section-scoped
-
-Each chunk gets a monotonic global `chunk_index` in document order, and F8's `sources[].chunk_index` exposes it. The alternative is a per-section index (`(section_index, chunk_index_in_section)` exposed as a tuple or a composite string). Per-section would be more human-readable in a citation context ("Section 4, chunk 2") but it's a tuple, not an int, and it complicates the source rendering. I picked global because it gives `sources[].chunk_index` a single stable identifier and the per-section view is reachable through the `section_title` field anyway. Mention here so it's not silent.
+No remaining challenges. The three top-tier challenges raised in the initial DESIGN draft (summary threshold, warmup mechanism, embedder sync/async) and the two lower-tier challenges raised in review revision 1 (warmup timeout value, chunk_index scoping) are all resolved. See §11 for the full review trail.
 
 ---
 
@@ -956,3 +946,8 @@ This is where post-freeze design changes go (per REQUIREMENTS.md's frozen-doc ru
   7. **`/page/mobile-sections/` deprecation note** added to §4.10 and to the `WikipediaFetcher` docstring in §3. Migration to Parsoid-backed endpoints parked in `NOTES.md`.
   8. **Cleanup pass**: (a) §3 `validate_url` docstring rewritten to match the §4.9 check-order table step-for-step; (b) §6.3 memory table now has idle/peak columns and the rollup explicitly sums the peak column; (c) §7.4 disambiguates A15 by committing the HTML report folder (`coverage_report/`); (d) `num_ctx` default removed from `LLMClient.generate` and `RAGOrchestrator.__init__` — both now require it, so the per-call-type config wiring (`CHAT_NUM_CTX` vs `SUMMARY_NUM_CTX`) is explicit at call sites and never silently hardcoded.
   9. **F7 grounding-test question changed** from "Who won the 2024 FIFA World Cup?" to "Who wrote the play Hamlet?" (§7.2, §7.3). My own pickup during the revision: the original question is one the model might decline because it doesn't know (no 2024 World Cup exists; tournament is 2022 / 2026), which would pass the test for the wrong reason. The new question is canonical parametric knowledge that is unambiguously absent from *Photosynthesis* — so the test actually exercises the grounding instruction.
+- **2026-05-25 (review revision 2)** — Both residual challenges from revision 1 resolved:
+  1. **`WARMUP_TIMEOUT_S` stays at 30 s** (§4.2). The rare tail case where a slow host trips this is correctly handled by the existing graceful degradation: log warning, set `warmup_ok=False`, app still serves. Bumping to 60 s would slow startup on every cold compose-up to chase a low-frequency failure mode that's already harmless.
+  2. **`Chunk.chunk_index` stays global** (§3, §4.5). Single stable identifier beats per-section readability; `section_title` already provides the human-readable context in the F8 sources payload. Decisive secondary argument surfaced during resolution: `chunk_index` is also the Qdrant point id (§3 `VectorStore.upsert` notes "point's id is `chunk.chunk_index`"), giving a clean 1:1 mapping between the citation identifier and the vector-store record. Per-section `(section_index, chunk_index_in_section)` tuples would break that mapping or require synthesising a composite point id, both worse than what we have.
+
+  §9 now empty.
