@@ -202,7 +202,7 @@ Each task adds one component, its domain models if not yet present, its exceptio
 
 ### T09 — `RAGOrchestrator` + remaining fakes
 
-- **Status:** `[ ] todo`
+- **Status:** `[x] done`
 - **Goal:** Compose Embedder + VectorStore + LLMClient for the chat path. Build sources from retriever output (F8 / OQ-5), populate sources even when the answer is "not found in the article" (A17 / U8). Add the remaining fakes.
 - **Files touched:**
   - New: `backend/app/rag/orchestrator.py` (`RAGOrchestrator`, `NoActiveArticleError`, `RetrievalEmptyError`).

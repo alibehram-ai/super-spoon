@@ -56,3 +56,17 @@ class Hit:
     section_title: str
     text: str
     score: float
+
+
+@dataclass(frozen=True)
+class Source:
+    section_title: str
+    chunk_index: int
+    score: float
+    excerpt: str
+
+
+@dataclass(frozen=True)
+class ChatResponse:
+    answer: str
+    sources: list[Source]
