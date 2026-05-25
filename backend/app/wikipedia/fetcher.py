@@ -5,20 +5,12 @@ from urllib.parse import quote
 
 import httpx
 
+from backend.app.api.errors import (
+    ArticleDisambiguationError,
+    ArticleNotFoundError,
+    WikipediaUnavailableError,
+)
 from backend.app.domain.models import RawSection, WikipediaArticle
-
-
-class WikipediaFetchError(Exception):
-    """Raised by WikipediaFetcher with a stable reason code.
-
-    T10a re-parents this into the DomainError hierarchy as three distinct
-    subclasses keyed on the reason; for now a single class with a reason
-    field keeps T02's surface small.
-    """
-
-    def __init__(self, reason: str) -> None:
-        super().__init__(reason)
-        self.reason = reason
 
 
 class WikipediaFetcher:
@@ -57,7 +49,7 @@ class WikipediaFetcher:
             summary = await self._fetch_summary(client, article_title)
 
             if summary.get("type") == "disambiguation":
-                raise WikipediaFetchError("disambiguation")
+                raise ArticleDisambiguationError()
 
             canonical_title = (
                 summary.get("titles", {}).get("canonical")
@@ -91,7 +83,7 @@ class WikipediaFetcher:
         url = f"{self._base_url}/page/summary/{quote(title, safe='')}"
         response = await self._get_with_retry(client, url)
         if response.status_code == 404:
-            raise WikipediaFetchError("not_found")
+            raise ArticleNotFoundError()
         return response.json()
 
     async def _fetch_mobile_sections(
@@ -100,12 +92,14 @@ class WikipediaFetcher:
         url = f"{self._base_url}/page/mobile-sections/{quote(title, safe='')}"
         response = await self._get_with_retry(client, url)
         if response.status_code == 404:
-            raise WikipediaFetchError("not_found")
+            raise ArticleNotFoundError()
         return response.json()
 
     async def _get_with_retry(
         self, client: httpx.AsyncClient, url: str
     ) -> httpx.Response:
+        # Per DESIGN §5, both transient 5xx and read-timeout collapse to the
+        # single user-facing `wikipedia_unavailable` case (502).
         headers = {"User-Agent": self._user_agent}
         for attempt in range(self._max_retries + 1):
             try:
@@ -114,18 +108,18 @@ class WikipediaFetcher:
                 if attempt < self._max_retries:
                     await asyncio.sleep(self._retry_backoff_s * (2**attempt))
                     continue
-                raise WikipediaFetchError("timeout") from exc
+                raise WikipediaUnavailableError() from exc
 
             if response.status_code >= 500:
                 if attempt < self._max_retries:
                     await asyncio.sleep(self._retry_backoff_s * (2**attempt))
                     continue
-                raise WikipediaFetchError("transient")
+                raise WikipediaUnavailableError()
 
             return response
 
         # Loop always either returns or raises; this line is for the type checker.
-        raise WikipediaFetchError("transient")  # pragma: no cover
+        raise WikipediaUnavailableError()  # pragma: no cover
 
 
 class _ParagraphExtractor(HTMLParser):

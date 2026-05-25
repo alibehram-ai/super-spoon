@@ -3,26 +3,33 @@
 NF4 swappable abstraction: any implementation that satisfies this Protocol can
 replace QdrantVectorStore via dependency injection. The Protocol is sync —
 route handlers offload via `anyio.to_thread.run_sync` (DESIGN §6.1).
+
+``QdrantUnreachableError`` lives in ``backend.app.api.errors`` as a
+DomainError subclass (T10a) and is re-exported here. ``CollectionMissingError``
+stays a plain internal exception per DESIGN §5 — it never reaches users;
+the orchestrator turns the A12 "no active article" case into the user-facing
+``NoActiveArticleError`` upstream.
 """
 
 from typing import Protocol
 
+from backend.app.api.errors import QdrantUnreachableError
 from backend.app.domain.models import Chunk, Hit
 
-
-class QdrantUnreachableError(Exception):
-    """Raised when the vector store can't be reached (connection/transport).
-
-    Mapped to HTTP 503 (`vector_store_unavailable`) by the T10a handler.
-    """
+__all__ = [
+    "CollectionMissingError",
+    "QdrantUnreachableError",
+    "VectorStore",
+]
 
 
 class CollectionMissingError(Exception):
     """Raised when a search targets a collection that does not exist.
 
     Distinct from QdrantUnreachableError — the store is reachable but the
-    named collection isn't there. The chat route uses `collection_exists()`
-    upstream to surface this as the A12 `no_active_article` case to users.
+    named collection isn't there. INTERNAL only: the chat route uses
+    ``collection_exists()`` upstream to surface this as the A12
+    ``no_active_article`` case to users (DESIGN §5).
     """
 
     def __init__(self, collection: str) -> None:

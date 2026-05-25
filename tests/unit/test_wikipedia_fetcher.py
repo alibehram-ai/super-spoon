@@ -6,8 +6,13 @@ from typing import Any
 import httpx
 import pytest
 
+from backend.app.api.errors import (
+    ArticleDisambiguationError,
+    ArticleNotFoundError,
+    WikipediaUnavailableError,
+)
 from backend.app.domain.models import WikipediaArticle
-from backend.app.wikipedia.fetcher import WikipediaFetcher, WikipediaFetchError
+from backend.app.wikipedia.fetcher import WikipediaFetcher
 
 BASE_URL = "https://test.example/api/rest_v1"
 USER_AGENT = "silver-spoon-test/0.0 (https://example.invalid; contact: test@example.invalid)"
@@ -50,9 +55,8 @@ class TestErrorPaths:
 
         fetcher, recorded = _build_fetcher(handler)
 
-        with pytest.raises(WikipediaFetchError) as exc_info:
+        with pytest.raises(ArticleNotFoundError):
             await fetcher.fetch("Missing")
-        assert exc_info.value.reason == "not_found"
         # mobile-sections must not be called when summary 404s.
         assert all("/page/summary/" in str(r.url) for r in recorded)
 
@@ -76,9 +80,8 @@ class TestErrorPaths:
 
         fetcher, recorded = _build_fetcher(handler)
 
-        with pytest.raises(WikipediaFetchError) as exc_info:
+        with pytest.raises(ArticleDisambiguationError):
             await fetcher.fetch("Mercury")
-        assert exc_info.value.reason == "disambiguation"
         assert len(recorded) == 1
         assert "/page/summary/Mercury" in str(recorded[0].url)
 
@@ -88,9 +91,8 @@ class TestErrorPaths:
 
         fetcher, recorded = _build_fetcher(handler)
 
-        with pytest.raises(WikipediaFetchError) as exc_info:
+        with pytest.raises(WikipediaUnavailableError):
             await fetcher.fetch("Anything")
-        assert exc_info.value.reason == "transient"
         # initial attempt + one retry = 2 summary calls; mobile-sections never reached.
         assert len(recorded) == 2
         assert all("/page/summary/" in str(r.url) for r in recorded)
@@ -108,9 +110,8 @@ class TestErrorPaths:
 
         fetcher, _ = _build_fetcher(handler)
 
-        with pytest.raises(WikipediaFetchError) as exc_info:
+        with pytest.raises(ArticleNotFoundError):
             await fetcher.fetch("Sample_Article")
-        assert exc_info.value.reason == "not_found"
 
     async def test_timeout_raises_timeout_reason(self) -> None:
         def handler(_: httpx.Request) -> httpx.Response:
@@ -118,10 +119,11 @@ class TestErrorPaths:
 
         fetcher, recorded = _build_fetcher(handler)
 
-        with pytest.raises(WikipediaFetchError) as exc_info:
+        with pytest.raises(WikipediaUnavailableError):
             await fetcher.fetch("Anything")
-        assert exc_info.value.reason == "timeout"
         # Timeout also retries once before raising — same single-retry policy as 5xx.
+        # Per DESIGN §5, transient 5xx and read-timeout collapse to the same
+        # user-facing case (wikipedia_unavailable), hence the same exception.
         assert len(recorded) == 2
 
 

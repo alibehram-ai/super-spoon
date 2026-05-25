@@ -231,7 +231,7 @@ End of this phase = the brief's "containerise once happy path works end-to-end o
 
 ### T10a — `DomainError` hierarchy + central exception handler + re-parenting
 
-- **Status:** `[ ] todo`
+- **Status:** `[x] done`
 - **Goal:** Build the single source of truth for error → HTTP mapping. Define the `DomainError` base, subclass it for every F9 case, re-parent the local exceptions scattered across T01–T09 into the hierarchy, and ship the FastAPI exception handler that maps each subclass to the §5 `(status, code, message)` row. No FastAPI app, no routes — just the catalogue and the handler, tested via a throwaway in-test FastAPI fixture.
 - **Files touched:**
   - New: `backend/app/api/__init__.py`, `backend/app/api/errors.py` — `class DomainError(Exception)` with `code: str`, `message: str`, `status: int` class attributes (overridden per subclass per DESIGN §5). One subclass per F9 row: `UrlMalformedError`, `UrlNonWikipediaError`, `UrlNonEnglishError`, `UrlNamespaceError`, `UrlCuridError`, `WikipediaFetchError` (kept with `reason` carrying through to per-subclass dispatch *or* split into `ArticleNotFoundError` / `ArticleDisambiguationError` / `WikipediaUnavailableError` — chosen: split, so the handler dispatches on class identity rather than string-matching a reason field), `ArticleTooShortError`, `OllamaUnreachableError`, `OllamaTimeoutError`, `LLMResponseInvalidError`, `QdrantUnreachableError`, `RetrievalEmptyError`, `NoActiveArticleError`. Plus the FastAPI handler `domain_error_handler(request, exc)` returning `JSONResponse({"error": exc.code, "message": exc.message}, status_code=exc.status)`.

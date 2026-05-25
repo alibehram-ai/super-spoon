@@ -1,7 +1,14 @@
 import pytest
 
+from backend.app.api.errors import (
+    UrlCuridError,
+    UrlMalformedError,
+    UrlNamespaceError,
+    UrlNonEnglishError,
+    UrlNonWikipediaError,
+)
 from backend.app.domain.models import ValidatedUrl
-from backend.app.wikipedia.validator import UrlValidationError, validate_url
+from backend.app.wikipedia.validator import validate_url
 
 
 class TestRejectMalformed:
@@ -17,9 +24,8 @@ class TestRejectMalformed:
         ],
     )
     def test_unparseable_or_wrong_scheme(self, url: str) -> None:
-        with pytest.raises(UrlValidationError) as exc_info:
+        with pytest.raises(UrlMalformedError):
             validate_url(url)
-        assert exc_info.value.reason == "malformed"
 
 
 class TestRejectNonEnglish:
@@ -33,9 +39,8 @@ class TestRejectNonEnglish:
         ],
     )
     def test_other_language_wikipedia(self, url: str) -> None:
-        with pytest.raises(UrlValidationError) as exc_info:
+        with pytest.raises(UrlNonEnglishError):
             validate_url(url)
-        assert exc_info.value.reason == "non_english"
 
 
 class TestRejectNonWikipedia:
@@ -49,22 +54,19 @@ class TestRejectNonWikipedia:
         ],
     )
     def test_non_wikipedia_host(self, url: str) -> None:
-        with pytest.raises(UrlValidationError) as exc_info:
+        with pytest.raises(UrlNonWikipediaError):
             validate_url(url)
-        assert exc_info.value.reason == "non_wikipedia"
 
 
 class TestRejectCurid:
     def test_curid_query_rejected(self) -> None:
-        with pytest.raises(UrlValidationError) as exc_info:
+        with pytest.raises(UrlCuridError):
             validate_url("https://en.wikipedia.org/?curid=12345")
-        assert exc_info.value.reason == "curid"
 
     def test_curid_in_query_with_article_path_rejected(self) -> None:
         # curid wins over path-shape because it indicates an intent the user got wrong.
-        with pytest.raises(UrlValidationError) as exc_info:
+        with pytest.raises(UrlCuridError):
             validate_url("https://en.wikipedia.org/wiki/Photosynthesis?curid=12345")
-        assert exc_info.value.reason == "curid"
 
 
 class TestRejectNamespace:
@@ -74,16 +76,17 @@ class TestRejectNamespace:
     )
     def test_each_blocked_namespace(self, prefix: str) -> None:
         url = f"https://en.wikipedia.org/wiki/{prefix}Something"
-        with pytest.raises(UrlValidationError) as exc_info:
+        with pytest.raises(UrlNamespaceError) as exc_info:
             validate_url(url)
-        assert exc_info.value.reason == "namespace"
+        # The matched prefix is carried through for the {namespace} placeholder
+        # in the §5 user-facing message.
+        assert exc_info.value.namespace == prefix.rstrip(":")
 
     def test_percent_encoded_namespace_separator(self) -> None:
         # %3A is the percent-encoded ':' — must still be detected after decode.
         url = "https://en.wikipedia.org/wiki/Special%3ARandom"
-        with pytest.raises(UrlValidationError) as exc_info:
+        with pytest.raises(UrlNamespaceError):
             validate_url(url)
-        assert exc_info.value.reason == "namespace"
 
 
 class TestHappyPath:
@@ -138,11 +141,9 @@ class TestEmptyTitleAfterDecode:
         ],
     )
     def test_whitespace_only_title_is_malformed(self, url: str) -> None:
-        with pytest.raises(UrlValidationError) as exc_info:
+        with pytest.raises(UrlMalformedError):
             validate_url(url)
-        assert exc_info.value.reason == "malformed"
 
     def test_trailing_slash_with_no_title_is_malformed(self) -> None:
-        with pytest.raises(UrlValidationError) as exc_info:
+        with pytest.raises(UrlMalformedError):
             validate_url("https://en.wikipedia.org/wiki/")
-        assert exc_info.value.reason == "malformed"

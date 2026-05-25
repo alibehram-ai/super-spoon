@@ -19,34 +19,15 @@ flow:
 the LLMClient's required-num_ctx contract).
 """
 
+from backend.app.api.errors import NoActiveArticleError, RetrievalEmptyError
 from backend.app.domain.models import ChatResponse, Source
 from backend.app.embedding.base import Embedder
 from backend.app.llm.base import LLMClient
 from backend.app.vectorstore.base import VectorStore
 
+__all__ = ["NoActiveArticleError", "RAGOrchestrator", "RetrievalEmptyError"]
+
 _EXCERPT_CHARS = 200
-
-
-class NoActiveArticleError(Exception):
-    """Chat called before any article has been ingested (A12).
-
-    T10a maps this to HTTP 409 (`no_active_article`) with a user-facing
-    "Ingest a Wikipedia article first" message.
-    """
-
-    def __init__(self, collection: str) -> None:
-        super().__init__(
-            f"chat requires an ingested article; collection {collection!r} does not exist"
-        )
-        self.collection = collection
-
-
-class RetrievalEmptyError(Exception):
-    """Vector store returned zero hits for the question.
-
-    T10a maps this to HTTP 422 (`retrieval_empty`). Distinct from
-    NoActiveArticleError — the collection exists, it just has nothing relevant.
-    """
 
 
 class RAGOrchestrator:
@@ -78,9 +59,7 @@ class RAGOrchestrator:
             self._collection, query_vector, k=self._top_k
         )
         if not hits:
-            raise RetrievalEmptyError(
-                "vector store returned no hits for the question"
-            )
+            raise RetrievalEmptyError()
 
         chunks_block = "\n\n".join(
             f"[{i + 1}] {hit.section_title}\n{hit.text}"

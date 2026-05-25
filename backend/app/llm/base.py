@@ -1,4 +1,4 @@
-"""LLMClient Protocol and shared exceptions.
+"""LLMClient Protocol.
 
 NF4 swappable abstraction. Async Protocol because the production transport
 (httpx.AsyncClient) is async; tests substitute a FakeLLM that implements the
@@ -8,31 +8,27 @@ same signatures and is awaited by callers.
 summary call sites wire their own `CHAT_NUM_CTX` / `SUMMARY_NUM_CTX` via
 constructor args so per-call-type context windows are explicit and never
 silently hardcoded.
+
+The three LLM error classes (``OllamaUnreachableError``, ``OllamaTimeoutError``,
+``LLMResponseInvalidError``) live in ``backend.app.api.errors`` as DomainError
+subclasses (T10a) and are re-exported here so existing callers can keep their
+imports.
 """
 
 from typing import Protocol
 
+from backend.app.api.errors import (
+    LLMResponseInvalidError,
+    OllamaTimeoutError,
+    OllamaUnreachableError,
+)
 
-class OllamaUnreachableError(Exception):
-    """Connection refused, DNS failure, connect-timeout, protocol error, or 5xx
-    after retry. T10a maps this to HTTP 503 (`llm_unavailable`).
-    """
-
-
-class OllamaTimeoutError(Exception):
-    """Read/write timeout after the connection was established — Ollama is up
-    but the request hit the configured `OLLAMA_TIMEOUT_S` budget. Distinct
-    from unreachable because the user-facing remedy differs (the user can
-    retry; the operator might lower `num_predict` or check Ollama load).
-    T10a maps this to HTTP 504 (`llm_timeout`).
-    """
-
-
-class LLMResponseInvalidError(Exception):
-    """The HTTP exchange succeeded but the response payload was unusable
-    (empty string in `response`, or the `response` key was missing entirely).
-    T10a maps this to HTTP 502 (`llm_response_invalid`).
-    """
+__all__ = [
+    "LLMClient",
+    "LLMResponseInvalidError",
+    "OllamaTimeoutError",
+    "OllamaUnreachableError",
+]
 
 
 class LLMClient(Protocol):

@@ -1,22 +1,13 @@
 import re
 
+from backend.app.api.errors import ArticleTooShortError
 from backend.app.domain.models import (
     CleanedArticle,
     Section,
     WikipediaArticle,
 )
 
-
-class ArticleTooShortError(Exception):
-    """Raised when the cleaned body is below the configured floor.
-
-    T10a re-parents this into the DomainError hierarchy; for now a plain
-    local exception keeps T03's surface small.
-    """
-
-    def __init__(self, char_count: int) -> None:
-        super().__init__(f"Cleaned body has {char_count} chars; below minimum.")
-        self.char_count = char_count
+__all__ = ["ArticleCleaner", "ArticleTooShortError"]
 
 
 _DEFAULT_DROP = frozenset(
