@@ -1,6 +1,6 @@
 # REQUIREMENTS.md
 
-My interpretation of the take-home brief. This document is the contract I'm building against. Anything not stated here is out of scope; anything ambiguous is captured under **Open Questions** with a recommendation that I'll proceed with unless overridden.
+My interpretation of the take-home brief. This document is the contract I'm building against. Anything not stated here is out of scope; anything ambiguous is captured in §10–12 with its resolution path.
 
 ---
 
@@ -15,20 +15,20 @@ Build a small, containerised web app that lets a user paste a Wikipedia URL, get
 3. App fetches and parses the article (body text, section structure).
 4. App generates a concise summary via the local LLM and displays it.
 5. App chunks the article, embeds the chunks, stores them in a vector DB (replacing any prior article's data).
-6. A chat box appears below the summary. User asks a question, app retrieves top-k chunks, passes them to the local LLM with a grounded prompt, and renders the answer.
-7. Repeat step 6. Pasting a new URL restarts at step 3 and wipes the previous article's index.
+6. A chat box appears below the summary. User asks a question, app retrieves top-K chunks, passes them to the local LLM with a grounded prompt, and renders the answer plus a structured list of source sections.
+7. Repeat step 6. Pasting a new URL restarts at step 3 and wipes the previous article's index. Page refresh discards the active article (no persistence).
 
 ## 3. In Scope
 
 - Single-page web UI: URL input, summary panel, chat panel.
-- Wikipedia article ingestion (English Wikipedia, standard article pages).
-- Article chunking + embedding + vector store insertion.
+- Wikipedia article ingestion (English Wikipedia only).
+- Section-aware chunking, in-process embedding, vector store insertion.
 - LLM-generated summary on ingest.
-- RAG-grounded Q&A: retrieve from vector store, answer with local LLM only.
-- Single-article session: one article active at a time; new URL replaces it.
-- Single-turn chat: each question answered independently (no conversation memory).
+- RAG-grounded Q&A with structured source citations in the response payload.
+- Single-article session; new URL replaces it; refresh loses it.
+- Single-turn chat: each question answered independently. The UI may render a transcript of prior Q&A purely for user reference; the backend is stateless.
 - Local LLM via Ollama, containerised by default with a host-side fallback documented.
-- Vector DB as a service in `docker compose`.
+- Vector DB as a service in `docker compose`, ephemeral (no named volume).
 - One-command bring-up: `docker compose up`.
 - Test suite with ≥85% line coverage and one integration test against the wired-up stack.
 - Three planning artefacts at repo root: `REQUIREMENTS.md`, `DESIGN.md`, `TASKS.md`.
@@ -37,187 +37,185 @@ Build a small, containerised web app that lets a user paste a Wikipedia URL, get
 
 ## 4. Out of Scope
 
-These are explicitly **not** being built. If I find myself drifting into any of them, I'll stop and revise this section.
-
-- Authentication, user accounts, sessions.
-- Multi-article history, search across articles, or article library UI.
-- Conversation memory across questions (each chat turn is independent).
-- Streaming token output (unless trivial — see Open Question OQ-7).
-- Non-Wikipedia URLs (generic web scraping).
+- Authentication, user accounts, sessions, multi-user concurrency tuning.
+- Multi-article history, search across articles, article library UI.
+- Conversation memory in the prompt (each chat turn is independent on the backend).
+- Streaming token output.
+- Non-Wikipedia URLs.
 - Non-English Wikipedia (`*.wikipedia.org` for other languages).
-- Hosted inference at runtime — no OpenAI/Anthropic/Gemini calls in the running app.
-- Analytics, telemetry, feedback widgets, rate limiting beyond what the framework gives for free.
+- URL caching, summary caching, persistent embeddings across sessions.
+- Hosted inference at runtime.
+- Analytics, telemetry, rate limiting beyond framework defaults.
 - Visual polish beyond "functional and unembarrassing".
 - Mobile-specific layout work.
-- Production hardening (HTTPS, secrets manager, prod-grade observability).
-- Multi-user concurrency tuning beyond what a default FastAPI worker handles.
+- Production hardening (HTTPS, secrets manager, observability stack).
 
 ## 5. Functional Requirements
 
-| ID  | Requirement                                                                                                                                   |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| F1  | User can submit a Wikipedia URL via a single text input on the main page.                                                                     |
-| F2  | The app validates that the URL points to a Wikipedia article (host check + path check) before fetching.                                       |
-| F3  | The app fetches the article and extracts the main body text and section structure. References are best-effort (see OQ-4).                     |
-| F4  | The app generates a summary of the article via the local LLM and renders it in the UI.                                                        |
-| F5  | The app chunks the article text, generates embeddings for each chunk, and stores them in the vector DB with metadata (section title, offset). |
-| F6  | Submitting a new URL clears the vector DB collection for the previous article before ingesting the new one.                                   |
-| F7  | The chat box accepts a question and returns an answer that is grounded in retrieved chunks (RAG), not the model's parametric knowledge.       |
-| F8  | The chat answer surfaces which chunks/sections it drew from (citation strategy — see OQ-5).                                                   |
-| F9  | The app returns a clear error to the user for: malformed URL, non-Wikipedia URL, 404 from Wikipedia, empty article, disambiguation page.      |
-| F10 | The summary and chat both respond within a reasonable bound on a 3B-class model (target: summary < 60s, chat answer < 30s on a dev laptop).   |
+| ID  | Requirement |
+| --- | --- |
+| F1  | User can submit a Wikipedia URL via a single text input on the main page. |
+| F2  | URL validation accepts `https?://(en\.)(m\.)?wikipedia\.org/wiki/<Article_Title>`. `en.m.wikipedia.org` is normalised to `en.wikipedia.org`. URL fragments (`#History`) are stripped. URLs in `Special:`, `Talk:`, `Category:`, `File:`, `Help:`, `User:`, `Portal:` namespaces, `?curid=` style URLs, and non-English Wikipedia hosts (`fr.wikipedia.org`, etc.) are rejected at validation with a clear user-facing message. |
+| F3  | The app fetches the article via the Wikipedia REST API and extracts the main body text and section structure. The "References", "External links", "Further reading", "See also", and "Notes" sections are stripped before chunking. |
+| F4  | The app generates a 4–8 sentence summary via the local LLM and renders it in the UI. For articles whose cleaned body exceeds the model's context budget, the summarisation strategy is a DESIGN.md concern (see A4 and §12 Challenge 3). |
+| F5  | The app chunks the article (section-aware; see A10), embeds each chunk in-process with sentence-transformers, and stores them in Qdrant with metadata: `section_title`, `section_index`, `chunk_index_in_section`, `char_offset_start`, `char_offset_end`, `text`. |
+| F6  | Submitting a new URL drops and recreates the active Qdrant collection before ingest. |
+| F7  | The chat endpoint embeds the question, retrieves top-K chunks, and assembles a prompt that instructs the LLM to answer **only** from the provided chunks and to reply "not found in the article" when the chunks don't contain the answer. Grounding is enforced through prompt design and verified with a test that asks a known-out-of-corpus question and asserts the model declines to answer. We do not claim the model never leaks parametric knowledge; we claim it is instructed not to and that the instruction is tested. |
+| F8  | The chat response payload has shape `{answer: string, sources: [{section_title, chunk_index, score, excerpt}]}`. The frontend renders the answer with the source list alongside (as chips, footnotes, or a collapsible — exact UI is a DESIGN concern). Citations come from the retriever output, not from the LLM, so they cannot be hallucinated. |
+| F9  | Clear user-facing errors for: malformed URL, non-Wikipedia URL, non-English wiki, namespace URL (Special/Talk/etc.), 404 from Wikipedia, disambiguation page, empty or very short article (< 500 chars body), Ollama unreachable, vector DB unreachable, retrieval returning zero chunks. |
+| F10 | Latency targets — summary < 60s, chat answer < 30s on a developer laptop — apply **once Ollama has loaded the model into memory**. The first request after `docker compose up` may exceed these budgets due to cold start. The backend issues a best-effort warmup ping to Ollama on application startup (see A16). Cold-start behaviour is documented in `README.md`. |
 
 ## 6. Non-Functional Requirements
 
-| ID   | Requirement                                                                                                                                                            |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| NF1  | **One-command bring-up.** `docker compose up` brings the full stack online: app, vector DB, LLM runtime (default), or app + vector DB with documented host-side LLM.   |
-| NF2  | **No secrets in the repo.** `.env.example` enumerates configurable values; real `.env` is gitignored.                                                                  |
-| NF3  | **No hosted LLM calls at runtime.** Hosted models may be used by AI agents in the IDE during development only.                                                         |
-| NF4  | **Swappable LLM and vector store.** Both sit behind interfaces so a different provider could be wired in without touching call sites. Justification belongs in DESIGN. |
-| NF5  | **Test coverage ≥ 85% line coverage** on application code. Coverage report committed to repo. Generated boilerplate and entrypoint excluded — exclusions documented.   |
-| NF6  | **Meaningful tests.** Unit tests mock the LLM and vector DB. At least one integration test runs the real wired-up stack end-to-end.                                    |
-| NF7  | **Clear separation of concerns.** Scraping, chunking, embedding, retrieval, generation, and HTTP layer are distinct modules.                                           |
-| NF8  | **Reasonable image sizes and clean compose.** No unused services, no stale build context bloat.                                                                        |
-| NF9  | **Honest documentation.** README states prerequisites, known limitations, and how to swap the LLM model. Trade-offs called out in DESIGN.                              |
-| NF10 | **Reproducibility.** A reviewer who has Docker installed can clone and run; no hidden host dependencies beyond what's in README.                                       |
+| ID   | Requirement |
+| ---- | --- |
+| NF1  | **One-command bring-up.** `docker compose up` brings the full stack online: FastAPI app, Qdrant, Ollama (default), or app + Qdrant with documented host-side Ollama fallback. |
+| NF2  | **No secrets in the repo.** `.env.example` enumerates configurable values; real `.env` is gitignored. |
+| NF3  | **No hosted LLM calls at runtime.** Hosted models may be used by AI agents in the IDE during development only. |
+| NF4  | **Three swappable abstractions: LLM client, vector store, embedder.** Each behind an interface so a different provider could be wired in without touching call sites. Justification in DESIGN.md. |
+| NF5  | **Test coverage ≥ 85% line coverage** on application code. Coverage report committed. Generated boilerplate, entrypoint, and framework glue excluded — exclusions documented in `.coveragerc` / `pyproject.toml` and called out in DESIGN. |
+| NF6  | **Meaningful tests.** Unit tests mock the LLM, vector DB, and embedder. At least one integration test runs the real wired-up stack end-to-end against a cached fixture article. |
+| NF7  | **Clear separation of concerns.** Scraper, chunker, embedder, retriever, generator, RAG orchestrator, and HTTP layer are distinct modules. |
+| NF8  | **Reasonable image sizes and clean compose.** No unused services, no stale build context bloat. |
+| NF9  | **Honest documentation.** README states prerequisites, known limitations, cold-start behaviour, and how to swap the LLM, embedder, and vector DB. Trade-offs called out in DESIGN. |
+| NF10 | **Reproducibility.** A reviewer who has Docker installed can clone and run; no hidden host dependencies beyond what's in README. |
 
-## 7. Constraints (from the brief, non-negotiable)
+## 7. Constraints (non-negotiable, from the brief)
 
-- **Stack:** Python + FastAPI backend, React + Vite frontend. (Confirmed.)
-- **LLM runtime:** Ollama, containerised by default; host-side Ollama documented as fallback for slow machines.
-- **Vector DB:** runs as a compose service, not in-process.
-- **Article handling:** replace on new URL; only one article active at a time.
-- **Chat:** single-turn; no conversation memory in the prompt.
-- **Embeddings:** local model preferred; hosted small embedding model acceptable if justified in DESIGN.
-- **Planning artefacts:** REQUIREMENTS.md, DESIGN.md, TASKS.md at repo root.
-- **Submission:** public git repo, README, docker-compose, coverage report, recording/screenshots.
+- Planning artefacts REQUIREMENTS.md, DESIGN.md, TASKS.md at repo root.
+- No hosted LLM calls in the running app.
+- Vector DB runs as a compose service, not in-process.
+- Single command brings up the full stack.
+- No secrets committed.
+- ≥85% line coverage with meaningful tests; coverage report committed.
+- Public git repo submission with README, docker-compose, recording/screenshots.
 
-## 8. Assumptions (proceed unless overridden)
+## 8. Confirmed Decisions (locked)
 
-These are the calls I'll make unilaterally if you don't push back. Each one is reversible early, expensive late — flag any that are wrong.
+These are the decisions you confirmed (or explicitly delegated to me). They are repeated here so the doc stands alone.
 
-| ID  | Assumption                                                                                                                          |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| A1  | "Wikipedia article" means English Wikipedia (`en.wikipedia.org`) standard article pages. Special pages, talk pages, etc. are rejected at the URL-validation step. |
-| A2  | The vector DB is allowed to persist between container restarts (named volume), but each new URL ingest still wipes its own collection. |
-| A3  | The chat answers in plain prose, with optional inline citations to section names (see OQ-5).                                        |
-| A4  | "Concise summary" is a 4–8 sentence paragraph, not a multi-section structured summary. Single LLM call.                              |
-| A5  | The summary is regenerated on every fresh ingest; it is not cached separately from the article.                                      |
-| A6  | A single user is using the app at a time. No multi-tenancy, no per-session isolation in the vector store.                            |
-| A7  | The vector DB collection is named per-article (e.g., URL hash) so "replace" means drop-and-recreate one collection, not the whole DB. |
-| A8  | The integration test is allowed to use a real but tiny model (or a stub model server) to keep CI feasible. Full Ollama in CI is not required. |
-| A9  | Article length is capped (e.g., truncate at ~200k chars / ~50k tokens of raw text) to bound ingest time and memory. Cap is documented in README. |
-| A10 | Reasonable defaults for chunking: ~800-token chunks with ~100-token overlap, section-aware. Tunable via env. (Detail in DESIGN.)     |
-| A11 | Retrieval defaults: top-k=5, cosine similarity. Tunable via env.                                                                     |
-| A12 | The app gracefully degrades if the vector DB is empty on chat (returns "ingest an article first") rather than erroring.              |
-| A13 | The Wikipedia fetch path uses a polite user-agent string and respects a single retry on transient failure; no aggressive scraping.   |
-| A14 | The frontend is a single page; no client-side routing library is required.                                                           |
-| A15 | The coverage report format is `coverage.xml` + an HTML report committed as a folder or zipped artefact. Screenshot is acceptable.    |
+| Decision | Value |
+| --- | --- |
+| Backend | Python / FastAPI |
+| Frontend | React / Vite |
+| LLM runtime | Ollama, containerised by default; host-side documented as fallback |
+| LLM model | `llama3.2:3b` |
+| Embedding model | Local sentence-transformers, **`bge-small-en-v1.5`** *(delegated by user; see §12 Challenge 1 for the case for MiniLM)* |
+| Embedding execution | In-process (batched), not via Ollama |
+| Vector DB | Qdrant, containerised, **ephemeral** (no named volume) |
+| Chunking | Section-aware; sections under ceiling stay whole; longer sections sub-chunked at 512 tokens with 64-token overlap, respecting paragraph boundaries |
+| Section ceiling | 1000 tokens |
+| Retrieval top-K | 4 |
+| Similarity metric | Cosine |
+| URL handling | Replace semantics, one article active at a time. No caching, no history. |
+| Chat | Single-turn, stateless backend. UI may show prior Q&A as transcript for user reference. |
+| Scraping | Wikipedia REST API, English Wikipedia only. |
+| Session | Single-session, refresh loses the active article. |
+| Bad input | Validate URL pattern; fail clearly on disambiguation pages and non-English wikis. |
 
-## 9. Open Questions (decisions for you)
+## 9. Assumptions (proceed unless overridden)
 
-For each I've named 2–3 options, called out the trade-off, and made a recommendation. **The recommendation is my default if you don't reply** — flag the ones you want to override.
+| ID  | Assumption |
+| --- | --- |
+| A1  | "Wikipedia article" means English Wikipedia (`en.wikipedia.org`, with `en.m.wikipedia.org` normalised). Other languages and special namespaces are rejected at validation. |
+| A2  | **Vector DB is ephemeral.** No named volume. On `docker compose down` or container restart, all data is lost. The UI shows the empty state on next start. Consistent with the single-article scope and the "refresh loses the article" decision. |
+| A3  | Chat answers are prose. Source attribution is delivered as a structured `sources` array in the response payload (F8), not embedded in the prose. |
+| A4  | A summary is a 4–8 sentence paragraph. For articles whose cleaned body fits within the model's context budget (~6K tokens on `llama3.2:3b` with 8K window), a single LLM call generates the summary. For longer articles, the strategy (hierarchical map-reduce vs leading-N-tokens vs sliding window) is a DESIGN.md decision; REQUIREMENTS commits only to "the user sees a coherent summary after ingest". See §12 Challenge 3. |
+| A5  | The summary is regenerated on every fresh ingest. Not cached. |
+| A6  | A single user uses the app at a time. No multi-tenancy, no per-session isolation in the vector store. |
+| A7  | The vector DB uses a single collection named `active_article`. Ingest drops and recreates it. Given A2 (ephemeral) and the no-caching decision, no URL-hashing or per-article dedup is needed. |
+| A8  | The integration test uses real Qdrant and real Ollama (the wired-up stack), but runs against a cached fixture HTML for the Wikipedia article so it is offline-deterministic. The fixture is `Photosynthesis` (long, stable, well-sectioned, public domain). |
+| A9  | Article length is capped at ~200k chars of cleaned body text (~50k tokens). Articles longer than this are truncated, with a flag surfaced in the UI. We do not reject long articles outright (see U13). |
+| A10 | **Chunking is section-aware.** Sections under the 1000-token ceiling stay whole. Sections above the ceiling are sub-chunked at ~512 tokens with ~64-token overlap, respecting paragraph boundaries. Each chunk carries section metadata for citation (F5). All thresholds (ceiling, sub-size, overlap) configurable via env. |
+| A11 | Retrieval defaults: top-K = 4, cosine similarity. Configurable via env. |
+| A12 | If the chat endpoint is called before any article is ingested, it returns a clear "ingest an article first" response rather than erroring. |
+| A13 | The Wikipedia fetch path uses a polite identifying user-agent and a single retry with exponential backoff on transient failure. No aggressive scraping. |
+| A14 | The frontend is a single page; no client-side router. State is in React component state and lost on refresh. |
+| A15 | Coverage report is generated as `coverage.xml` plus an HTML report. The HTML report is committed as a folder (or a screenshot of the summary line, per the brief's allowance). Exclusions documented in `.coveragerc`. |
+| A16 | **Ollama warmup ping** on app startup: the backend makes a best-effort no-op generation request to Ollama once at boot to load the model into memory before the user's first request. Failure does not block startup; it logs a warning. |
+| A17 | The chat response includes a structured `sources` array even when the LLM says "not found in the article" — the sources reflect what was retrieved, regardless of whether the LLM used them. Useful for debugging and demo transparency. |
 
-### OQ-1 — Specific local LLM model
+## 10. Open Questions — Resolution Log
 
-- **Option A — `llama3.2:3b`** *(recommended)*: well-balanced, instruction-tuned, runs on a laptop. ~2GB pull.
-- Option B — `qwen2.5:3b`: stronger reasoning on some benchmarks, similar size, slightly slower TTFT in my experience.
-- Option C — `phi3:mini`: smallest footprint (~2.3GB), occasionally worse at grounded extraction.
-- **Trade-off:** size vs answer quality on grounded Q&A. All three fit in the brief's "3B class" guidance.
-- **My call if you don't reply:** A.
+Audit trail for the OQs in the original draft. Each is now resolved.
 
-### OQ-2 — Vector database
+| ID | Question | Resolution |
+| --- | --- | --- |
+| OQ-1 | Local LLM model | `llama3.2:3b` (user-confirmed). |
+| OQ-2 | Vector DB | Qdrant (user-confirmed). |
+| OQ-3 | Embedding model | **Reversed during review.** Originally recommended `nomic-embed-text` via Ollama. Flipped to in-process sentence-transformers because (i) batched in-process embedding is ~10× faster for a single-article workload; (ii) decouples ingest from LLM runtime; (iii) gives a third swappable abstraction in DESIGN; (iv) image-size impact is negligible (~500 MB CPU-only). Within sentence-transformers, chose `bge-small-en-v1.5` over `all-MiniLM-L6-v2` for the higher MTEB retrieval score at minimal extra cost (see §12 Challenge 1). |
+| OQ-4 | Scraping strategy | Wikipedia REST API (user-confirmed). |
+| OQ-5 | Citation style | **Reversed during review.** Originally inline section tags in prose. Flipped to structured `sources` array in response payload because (i) local 3B models hallucinate inline tags; (ii) structured sources are deterministically testable; (iii) frontend can render them cleanly. The LLM is not asked to emit citation tags. |
+| OQ-6 | References / external links | Dropped before chunking (low retrieval signal). |
+| OQ-7 | Streaming vs batch | Batch responses. |
+| OQ-8 | Disambiguation / redirects | Follow redirects silently; reject disambiguation pages with a clear error. |
+| OQ-9 | Empty / very short article | Refuse to ingest below 500 chars cleaned body; show error. |
+| OQ-10 | Coverage exclusions | Entrypoint, framework glue, generated code excluded; documented in `.coveragerc`. |
+| OQ-11 | Integration test scope | One full-stack test against a cached `Photosynthesis` fixture, real Qdrant, real Ollama. Offline-deterministic. |
+| OQ-12 | Where the summary lives | **Revised during review.** Originally persisted on backend keyed by URL hash. With the user-confirmed "refresh loses the article" decision plus A2 (ephemeral DB), the summary lives in frontend state during the session only. No backend persistence. |
 
-- **Option A — Qdrant** *(recommended)*: easy compose service, good filtering, persistent volumes, mature Python client.
-- Option B — Chroma: simpler, fewer moving parts, but its server mode is less battle-tested than Qdrant's.
-- Option C — pgvector: nice if we already had Postgres in the stack; we don't, so it adds an unneeded service.
-- **Trade-off:** Qdrant adds a small operational surface in exchange for first-class server semantics that make the integration test honest.
-- **My call if you don't reply:** A.
+## 11. Open Questions Resolved Unilaterally During Drafting
 
-### OQ-3 — Embedding model
+Decisions I made while drafting that you did not explicitly address. Each is a candidate for override.
 
-- **Option A — `nomic-embed-text` via Ollama** *(recommended)*: keeps everything in one runtime, no extra Python deps for model weights, decent quality, persists in the same Ollama volume.
-- Option B — `sentence-transformers/all-MiniLM-L6-v2` in-process: faster cold start, no Ollama round-trip per chunk, but adds PyTorch/Transformers to the app image (bigger image).
-- Option C — Hosted small embedding model: brief allows it, but adds a runtime hosted dependency I'd rather avoid.
-- **Trade-off:** image size and dep weight vs latency. Option A keeps the runtime topology tight.
-- **My call if you don't reply:** A.
+| ID  | Decision | Reasoning |
+| --- | --- | --- |
+| U1  | Section ceiling: 1000 tokens | Middle ground: sections below stay whole and retrieve cleanly; sections above sub-chunk with overlap. Tunable via env. |
+| U2  | Article length cap: ~200k chars / ~50k tokens | Bounds ingest time and memory. Surfaces a UI flag if truncated. |
+| U3  | Integration test fixture: `Photosynthesis` | Long, stable, well-sectioned, public domain. Cached as HTML in the repo for offline determinism. |
+| U4  | Warmup ping to Ollama on app startup | Best-effort, non-blocking. Cold-start documented in README. Prevents the demo recording from looking broken on first request. |
+| U5  | URL validation accepts `en.wikipedia.org` and `en.m.wikipedia.org` (latter normalised) | Mobile URLs are common copy-paste artefacts; rejecting them is hostile UX. URL fragments are stripped. |
+| U6  | Polite identifying user-agent on Wikipedia fetch with single retry / backoff | Wikipedia's usage policy expects an identifying UA; one retry handles transient hiccups. |
+| U7  | Single collection named `active_article` (no URL hashing) | Simpler than per-URL hashed collections, given ephemeral DB + no-caching scope. |
+| U8  | `sources` array returned even on "not found in article" answers | Reflects what was retrieved, regardless of LLM disposition. Useful for debugging and demo transparency. |
+| U9  | Coverage report committed as HTML report folder (or screenshot of summary line) | Brief explicitly allows either. HTML is more reviewable; screenshot is lower-friction. |
+| U10 | Frontend has no client-side router | Single-page scope makes a router unjustified complexity. |
+| U11 | Configurable thresholds (chunking, retrieval, length cap) live in env, not in YAML or a config service | One mechanism, documented in `.env.example`. |
+| U12 | Stripped sections: "References", "External links", "Further reading", "See also", "Notes" | All low-signal for grounded Q&A; including them adds noise to retrieval. |
+| U13 | Truncate-on-cap rather than reject for >200k char articles | Producing something on long articles is better UX than a hard reject. Surfaces a flag in the UI. |
+| U14 | Each chunk's stored metadata includes the chunk text itself | Required to populate the `sources[].excerpt` field in F8 without a second lookup. |
+| U15 | Disambiguation pages are detected via the Wikipedia REST API's page metadata, not by text heuristics | More reliable than parsing the page body for telltale strings. |
 
-### OQ-4 — Scraping strategy
+## 12. Top 3 Decisions to Challenge Before Moving to DESIGN.md
 
-- **Option A — Wikipedia REST API (`/api/rest_v1/page/...`)** *(recommended)*: returns clean HTML/plain text and section structure. Stable, polite, no scraping fragility.
-- Option B — `wikipedia` Python package: convenient, but wraps the same API and adds a dependency.
-- Option C — Raw HTML scrape with BeautifulSoup: most flexible, least robust to layout changes.
-- **Trade-off:** robustness vs flexibility. We don't need flexibility for this scope.
-- **My call if you don't reply:** A.
+The three forks in the road where a second opinion would change the outcome.
 
-### OQ-5 — Citation style in chat answers
+### Challenge 1 — Embedding model: `bge-small-en-v1.5` vs `all-MiniLM-L6-v2`
 
-- **Option A — Inline section names in brackets, e.g. "... according to [History] ..."** *(recommended)*: lightweight, readable, machine-checkable.
-- Option B — Footnote-style numbered citations rendered below the answer with section name + offset.
-- Option C — No citations, just the prose answer.
-- **Trade-off:** auditability of grounding vs UI complexity. A is the cheapest visible signal that RAG is actually happening.
-- **My call if you don't reply:** A.
+I picked `bge-small-en-v1.5` (33 M params) over `all-MiniLM-L6-v2` (22 M params) because its MTEB retrieval score is ~10 points higher. For RAG, retrieval quality is the bottleneck, and the embedder is the cheapest place to lift it.
 
-### OQ-6 — How to handle references / external links in the article
+**Counter-argument:** MiniLM is the canonical "small RAG" embedder — years of production telemetry, faster on CPU, smaller download for the demo image. For Wikipedia-style Q&A where questions often map cleanly to section text, MiniLM may close most of the MTEB gap in practice. The seconds saved on embedding may matter more in the demo than a marginal retrieval bump on benchmarks.
 
-- **Option A — Drop references and external-link sections entirely before chunking** *(recommended)*: they're mostly noise for grounded Q&A.
-- Option B — Keep "References" as searchable chunks: lets the user ask "what sources back claim X?", but blows up the index with low-signal text.
-- **Trade-off:** index quality vs answering meta-questions about sourcing.
-- **My call if you don't reply:** A.
+**My recommendation:** stay with `bge-small-en-v1.5`, but make the embedder a one-env-var swap in DESIGN.md so we can A/B test if the demo answers feel weak.
 
-### OQ-7 — Streaming vs batch chat responses
+### Challenge 2 — Top-K = 4
 
-- **Option A — Batch (single response after generation completes)** *(recommended)*: simpler API, simpler frontend, simpler tests. Acceptable on a 3B model.
-- Option B — Streaming via SSE: nicer UX, but adds wire-format and frontend complexity that doesn't earn coverage points.
-- **Trade-off:** UX polish vs scope discipline. The brief explicitly says don't pad.
-- **My call if you don't reply:** A.
+You confirmed K = 4. On a 3 B model with an 8 K context window, K = 5 or 6 chunks of ~600 tokens each would fit comfortably and improve recall for multi-hop questions ("How did X influence Y?"). K = 4 prioritises prompt cleanliness over recall.
 
-### OQ-8 — Disambiguation pages and redirects
+**Counter-argument for staying:** smaller K means each retrieved chunk gets more attention in the LLM's prompt, and on a 3 B model attention dilution is a real failure mode. Tighter retrieval can outperform broader retrieval on grounded QA.
 
-- **Option A — Follow redirects silently, reject disambiguation pages with a clear user error** *(recommended)*: redirects are part of normal Wikipedia behaviour; disambiguation pages are ambiguous by definition.
-- Option B — Follow both, treat disambiguation as an article: produces garbage summaries; bad UX.
-- Option C — Reject both: too strict; redirects are common.
-- **My call if you don't reply:** A.
+**My recommendation:** keep K = 4, but make it env-tunable (per A11) and try K = 6 in dev before recording the demo to see if it qualitatively improves answers. The decision can flip without a code change.
 
-### OQ-9 — Empty / very short article handling
+### Challenge 3 — Long-article summarisation strategy
 
-- **Option A — Refuse to ingest if extracted body < threshold (e.g. 500 chars), show error** *(recommended)*: avoids meaningless summaries and an empty chat.
-- Option B — Ingest anyway: technically works but produces a degraded experience.
-- **My call if you don't reply:** A.
+A4 punts this to DESIGN, but it materially affects the first thing a reviewer sees after ingest. Two viable strategies:
 
-### OQ-10 — Coverage exclusions
+- **Leading-N-tokens.** Stuff the first ~6 K tokens of cleaned body into a single summarisation prompt. Fast, simple, but biased toward the lede — which on Wikipedia is *already* a summary. Risk: the generated summary becomes a paraphrase of the lede paragraph, which is unimpressive in the demo.
+- **Hierarchical (map-reduce).** Summarise each section independently (parallelisable), then summarise the summaries in a second LLM call. More representative of the whole article. Roughly 2× the LLM calls; latency budget tightens but stays inside F10 once warm.
 
-- **Option A — Exclude `main.py` entrypoint, generated client code if any, and framework glue (e.g. `app.startup` hooks)** *(recommended)*: matches what the brief explicitly permits.
-- Option B — Exclude only the entrypoint.
-- **Trade-off:** stricter exclusions look more rigorous but make the 85% threshold genuinely harder.
-- **My call if you don't reply:** A. Exclusions called out in `pyproject.toml`/`coveragerc` and in DESIGN.
+**My recommendation:** hierarchical for any article over ~6 K tokens, leading-N for shorter ones. Demo will look stronger on long, structurally rich articles where the lede misses recent sections. This belongs in DESIGN.md, but it's worth a 60-second debate now because it changes how we should measure F10's latency budget.
 
-### OQ-11 — Integration test scope
+## 13. Definition of Done
 
-- **Option A — One full-stack test: start compose, ingest a known-stable Wikipedia URL (or a fixture), assert chat returns grounded answer** *(recommended)*. Heavy but high-signal.
-- Option B — A "wired-up" test that uses real vector DB but a stub LLM: faster, but doesn't exercise the model.
-- Option C — Both: ideal but probably over scope for 8–12h.
-- **Trade-off:** signal vs CI cost. A satisfies the brief literally.
-- **My call if you don't reply:** A, with the Wikipedia article cached as a fixture so the test is offline-deterministic.
-
-### OQ-12 — Where the summary lives
-
-- **Option A — Summary is stored on the backend keyed by article URL hash, served on GET** *(recommended)*: page refresh works without re-ingesting.
-- Option B — Summary lives only in frontend state: refresh loses it.
-- **My call if you don't reply:** A.
-
-## 10. Definition of Done
-
-- All hard requirements in §7 are satisfied.
-- Functional requirements F1–F10 demonstrably work in the recording/screenshots.
+- All hard constraints in §7 are satisfied.
+- Functional requirements F1–F10 demonstrably work in the recording / screenshots.
 - Non-functional requirements NF1–NF10 hold.
 - Coverage report shows ≥ 85% with exclusions documented.
 - REQUIREMENTS.md, DESIGN.md, TASKS.md present, internally consistent, and reflect what was actually built.
 - README runs cleanly from a fresh clone on a machine with Docker installed.
 - No hosted LLM calls in the running app.
-- NOTES.md (optional) flags anything the AI got wrong and what I'd change with another two days.
+- `NOTES.md` (optional) flags anything the AI got wrong that I had to correct, and what I would change with another two days.
 
 ---
 
-*This document is frozen once we agree on the Open Questions. Changes after that point go into a changelog at the bottom of DESIGN.md, not silently here.*
+*This document is frozen once the three challenges in §12 are resolved. Changes after that point go into a changelog at the bottom of DESIGN.md, not silently here.*
