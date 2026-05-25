@@ -1,0 +1,24 @@
+# Test suites and coverage artefacts — not needed in the runtime image.
+tests/
+coverage_report/
+.coverage
+.coverage.*
+
+# Node deps and build output — stage 1 reinstalls and rebuilds from source.
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Local secrets — env_file mounts .env at compose time, not via the image.
+.env
+.env.local
+
+# VCS / editor / tool caches.
+.git/
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.pytest_cache/
+.ruff_cache/

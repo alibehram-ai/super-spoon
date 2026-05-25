@@ -387,7 +387,7 @@ No automated frontend tests per the Phase-3 answer; verification is manual smoke
 
 ### T15 — Dockerfile (multi-stage) + docker-compose.yml + `.env.example` lockdown
 
-- **Status:** `[ ] todo`
+- **Status:** `[x] done`
 - **Goal:** Containerise per DESIGN §4.1. One-command bring-up. After this task, `docker compose up` works and the UI loads at `http://localhost:8000`.
 - **Files touched:**
   - New: `Dockerfile` — stage 1 `node:20-alpine` builds the frontend (`npm ci`, `npm run build` → `/dist`); stage 2 `python:3.11-slim` installs `uv`, copies `pyproject.toml`/`uv.lock`, runs `uv sync --frozen --no-dev`, copies `backend/` and the frontend `dist/` into `/app/static/`. `CMD ["uv","run","uvicorn","backend.app.main:app","--host","0.0.0.0","--port","8000"]`.

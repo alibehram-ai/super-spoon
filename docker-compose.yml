@@ -1,0 +1,85 @@
+# docker-compose.yml — silver-spoon2 stack (DESIGN §4.1).
+#
+# Two invocations (see README T18):
+#   docker compose --profile containerised-ollama up   # full stack
+#   docker compose up                                  # host-fallback (user runs `ollama serve`)
+#
+# The `containerised-ollama` profile gates the ollama and ollama-pull services;
+# `app` declares them with `required: false` so the dependency is permissive
+# when the profile is inactive.
+
+services:
+  # ---- Local LLM runtime (profile-gated) ----
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["containerised-ollama"]
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      # `ollama list` calls GET /api/tags internally; equivalent probe to the
+      # spec's curl but doesn't depend on curl being in the image (recent
+      # ollama/ollama tags don't ship it).
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+
+  # ---- One-shot model pull (profile-gated). Runs to completion, then exits. ----
+  ollama-pull:
+    image: ollama/ollama:latest
+    profiles: ["containerised-ollama"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      # Override the CLI's default localhost target so the pull RPC lands on
+      # the `ollama` service container.
+      OLLAMA_HOST: ollama:11434
+    entrypoint: ["ollama"]
+    command: ["pull", "${LLM_MODEL:-llama3.2:3b}"]
+    restart: "no"
+
+  # ---- Vector store. Ephemeral per A2 — no named volume. ----
+  qdrant:
+    image: qdrant/qdrant:v1.11.0
+
+  # ---- FastAPI app + bundled frontend static build. ----
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      # Optional: if the user hasn't copied `.env.example` to `.env`, defaults
+      # in pydantic-settings and compose interpolation fallbacks still apply.
+      - path: .env
+        required: false
+    depends_on:
+      ollama-pull:
+        condition: service_completed_successfully
+        # Permissive — when the `containerised-ollama` profile is inactive,
+        # ollama-pull isn't started and this dep doesn't block `app`. This is
+        # what makes host-fallback mode work without editing the compose file.
+        required: false
+      qdrant:
+        condition: service_started
+    healthcheck:
+      # python stdlib avoids needing curl in the runtime image.
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health').getcode() == 200 else 1)"
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      # 30s matches WARMUP_TIMEOUT_S (DESIGN §4.2) — the lifespan awaits the
+      # warmup ping with that bound before the app reports ready.
+      start_period: 30s
+
+volumes:
+  # The single persistent volume in the stack: caches the pulled model so warm
+  # restarts skip the ~2 GB download.
+  ollama_models:
