@@ -160,7 +160,7 @@ Each task adds one component, its domain models if not yet present, its exceptio
 
 ### T07 — `LLMClient` Protocol + `OllamaClient` + prompts
 
-- **Status:** `[ ] todo`
+- **Status:** `[x] done`
 - **Goal:** Define `LLMClient` and ship `OllamaClient` wrapping `httpx.AsyncClient` against `/api/generate` (non-streaming) with `warmup()`. All three F9 LLM error cases mapped. Prompt templates as plain strings.
 - **Files touched:**
   - New: `backend/app/llm/__init__.py`, `backend/app/llm/base.py` (`LLMClient` Protocol, `OllamaUnreachableError`, `OllamaTimeoutError`, `LLMResponseInvalidError`), `backend/app/llm/ollama.py` (`OllamaClient`), `backend/app/llm/prompts.py` (`SUMMARY_SHORT`, `SUMMARY_LONG`, `CHAT_GROUNDED` as f-string templates with explicit `{placeholders}`).
