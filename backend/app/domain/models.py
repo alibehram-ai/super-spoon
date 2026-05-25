@@ -48,3 +48,11 @@ class Chunk:
     text: str
     char_offset_start: int
     char_offset_end: int
+
+
+@dataclass(frozen=True)
+class Hit:
+    chunk_index: int
+    section_title: str
+    text: str
+    score: float

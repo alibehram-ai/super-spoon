@@ -5,6 +5,7 @@ description = "Wikipedia RAG take-home"
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.28.1",
+    "qdrant-client>=1.18.0",
     "sentence-transformers>=5.5.1",
 ]
 

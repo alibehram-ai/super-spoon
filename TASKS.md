@@ -132,7 +132,7 @@ Each task adds one component, its domain models if not yet present, its exceptio
 
 ### T06 — `VectorStore` Protocol + Qdrant impl + in-memory tests
 
-- **Status:** `[ ] todo`
+- **Status:** `[x] done`
 - **Goal:** Define the `VectorStore` Protocol and ship `QdrantVectorStore` wrapping `qdrant-client`. Unit tests run against `QdrantClient(":memory:")` per the Phase-3 answer — no docker dependency in the unit suite.
 - **Files touched:**
   - New: `backend/app/vectorstore/__init__.py`, `backend/app/vectorstore/base.py` (`VectorStore` Protocol, `QdrantUnreachableError`, `CollectionMissingError`), `backend/app/vectorstore/qdrant_store.py` (`QdrantVectorStore`).
