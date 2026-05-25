@@ -485,7 +485,7 @@ No automated frontend tests per the Phase-3 answer; verification is manual smoke
 
 ### T19 — Screen recording or screenshots
 
-- **Status:** `[ ] todo`
+- **Status:** `[x] done`
 - **Goal:** Capture the end-to-end demo per REQUIREMENTS §3 / Definition of Done. Short recording (or sequence of screenshots) showing: cold compose-up → URL paste → summary appears → chat question with grounded answer + sources → F7 grounding question with "not found in the article" + sources still rendered → paste a different URL → previous article is wiped.
 - **Files touched:**
   - New: `docs/recording.mp4` or `docs/screenshots/*.png` (depending on which feels cleaner — recording probably wins for the multi-step flow).

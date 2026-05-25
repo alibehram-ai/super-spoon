@@ -10,7 +10,17 @@ The full design rationale lives in [`REQUIREMENTS.md`](REQUIREMENTS.md) → [`DE
 
 ## Demo
 
-Screenshots of the end-to-end flow (URL paste → summary → grounded chat → F7 out-of-corpus decline) live under [`docs/screenshots/`](docs/screenshots/).
+End-to-end flow against the `Photosynthesis` article ([`docs/screenshots/`](docs/screenshots/)):
+
+| Step | Screenshot |
+| --- | --- |
+| 1. URL pasted, ready to ingest. | [`01-url-input.png`](docs/screenshots/01-url-input.png) |
+| 2. Local summary rendered, chat box ready. | [`02-summary-rendered.png`](docs/screenshots/02-summary-rendered.png) |
+| 3. First grounded answer with the 4-source collapsible. | [`03-first-grounded-answer.png`](docs/screenshots/03-first-grounded-answer.png) |
+| 4. Follow-up question being typed (same article, no state lost). | [`04-follow-up-question.png`](docs/screenshots/04-follow-up-question.png) |
+| 5. Source list expanded — section title, score, and excerpt per F8. | [`05-sources-expanded.png`](docs/screenshots/05-sources-expanded.png) |
+
+These were captured before the "Footnote" rename (T18) — the header still reads `silver-spoon2`, but the rendered behaviour is identical. F7 out-of-corpus grounding ("Who wrote the play Hamlet?" → "not found in the article") is exercised by [`tests/integration/test_full_stack.py`](tests/integration/test_full_stack.py) rather than captured as a screenshot.
 
 ## Prerequisites
 
